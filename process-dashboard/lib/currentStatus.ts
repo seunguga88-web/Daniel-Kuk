@@ -21,6 +21,23 @@ export interface CurrentStatusRow {
   alarmLevel: "risk" | "warning" | null;
 }
 
+export type TrafficLight = "green" | "yellow" | "red" | null;
+
+/**
+ * Fixed-rule traffic light, independent of the adjustable warning/risk day
+ * thresholds: on-time or ahead of schedule (or already 완료) is green,
+ * exactly 1 day late is yellow, 2+ days late is red. Not-started rows have
+ * no light (they're left blank, same as the rest of their row).
+ */
+export function trafficLight(row: CurrentStatusRow): TrafficLight {
+  if (row.processState === "not_started") return null;
+  if (row.processState === "completed") return "green";
+  if (row.delayDays === null) return null;
+  if (row.delayDays <= 0) return "green";
+  if (row.delayDays === 1) return "yellow";
+  return "red";
+}
+
 function processNum(name: string): number {
   const m = name.match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 0;

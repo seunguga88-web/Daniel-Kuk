@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseAllFiles } from "../lib/parseAll";
 import { loadVirtualDataInputs } from "./fixtures";
-import { listSnapshots, computeCurrentStatus } from "../lib/currentStatus";
+import { listSnapshots, computeCurrentStatus, trafficLight, type CurrentStatusRow } from "../lib/currentStatus";
 import type { DailyPlanData, ProcessStatusEntry } from "../lib/types";
 
 function getDataset() {
@@ -114,5 +114,43 @@ describe("computeCurrentStatus branch coverage (synthetic)", () => {
     expect(row.currentProcess).toBe("process 2");
     expect(row.status).toBe("완료");
     expect(row.delayDays).toBeNull();
+  });
+});
+
+describe("trafficLight", () => {
+  function row(overrides: Partial<CurrentStatusRow>): CurrentStatusRow {
+    return {
+      line: "Line 1",
+      config: "Config Z",
+      processState: "in_progress",
+      currentProcess: "process 1",
+      planDate: "2026-08-10",
+      delayDays: 0,
+      status: "계획준수",
+      alarmLevel: null,
+      ...overrides,
+    };
+  }
+
+  it("on-time or ahead of plan is green", () => {
+    expect(trafficLight(row({ delayDays: 0 }))).toBe("green");
+    expect(trafficLight(row({ delayDays: -3 }))).toBe("green");
+  });
+
+  it("exactly 1 day late is yellow", () => {
+    expect(trafficLight(row({ delayDays: 1 }))).toBe("yellow");
+  });
+
+  it("2 or more days late is red", () => {
+    expect(trafficLight(row({ delayDays: 2 }))).toBe("red");
+    expect(trafficLight(row({ delayDays: 9 }))).toBe("red");
+  });
+
+  it("completed rows are green even though delayDays is null", () => {
+    expect(trafficLight(row({ processState: "completed", delayDays: null }))).toBe("green");
+  });
+
+  it("not-started rows have no light (blank)", () => {
+    expect(trafficLight(row({ processState: "not_started", delayDays: null, currentProcess: null }))).toBeNull();
   });
 });

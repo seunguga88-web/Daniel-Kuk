@@ -1,8 +1,21 @@
 import ExcelJS from "exceljs";
 import type { YieldCell, Thresholds, YieldStatus } from "./yieldAnalysis";
 import { computeBaseline, classifyYield } from "./yieldAnalysis";
-import type { CurrentStatusRow, Snapshot } from "./currentStatus";
+import type { CurrentStatusRow, Snapshot, TrafficLight } from "./currentStatus";
+import { trafficLight } from "./currentStatus";
 import type { ScheduleThresholds } from "./scheduleAnalysis";
+
+const TRAFFIC_LIGHT_FILL: Record<NonNullable<TrafficLight>, string> = {
+  green: "FF22C55E",
+  yellow: "FFEAB308",
+  red: "FFEF4444",
+};
+
+const TRAFFIC_LIGHT_LABEL: Record<NonNullable<TrafficLight>, string> = {
+  green: "Green",
+  yellow: "Yellow",
+  red: "Red",
+};
 
 const FILL: Record<YieldStatus, string | null> = {
   risk: "FFFECACA",
@@ -111,7 +124,7 @@ export async function buildProcessDashboardWorkbook(
   sheet.getCell("B3").value = thresholds.riskDays;
 
   const headerRowIdx = 5;
-  const header = ["Line", "Config", "현재 대기 Process", "상태", "Daily Plan 계획일", "지연일수", "알람"];
+  const header = ["Line", "Config", "신호등", "현재 대기 Process", "상태", "Daily Plan 계획일", "지연일수", "알람"];
   const headerRow = sheet.getRow(headerRowIdx);
   header.forEach((h, i) => (headerRow.getCell(i + 1).value = h));
   headerRow.font = { bold: true };
@@ -125,16 +138,22 @@ export async function buildProcessDashboardWorkbook(
     const excelRow = sheet.getRow(r);
     excelRow.getCell(1).value = row.line;
     excelRow.getCell(2).value = row.config;
-    excelRow.getCell(3).value = row.currentProcess ? row.currentProcess.replace("process ", "Process ") : "";
-    excelRow.getCell(4).value =
+    const light = trafficLight(row);
+    excelRow.getCell(3).value = light ? TRAFFIC_LIGHT_LABEL[light] : "";
+    if (light) {
+      excelRow.getCell(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: TRAFFIC_LIGHT_FILL[light] } };
+    }
+    excelRow.getCell(4).value = row.currentProcess ? row.currentProcess.replace("process ", "Process ") : "";
+    excelRow.getCell(5).value =
       row.processState === "completed" ? "완료" : row.processState === "not_started" ? "" : "대기 중";
-    excelRow.getCell(5).value = row.planDate ?? "";
-    excelRow.getCell(6).value = row.delayDays ?? "";
-    excelRow.getCell(7).value = row.alarmLevel === "risk" ? "위험" : row.alarmLevel === "warning" ? "주의" : "";
+    excelRow.getCell(6).value = row.planDate ?? "";
+    excelRow.getCell(7).value = row.delayDays ?? "";
+    excelRow.getCell(8).value = row.alarmLevel === "risk" ? "위험" : row.alarmLevel === "warning" ? "주의" : "";
 
     const fill = row.alarmLevel ? FILL[row.alarmLevel] : null;
     if (fill) {
-      for (let c = 1; c <= 7; c++) {
+      for (let c = 1; c <= 8; c++) {
+        if (c === 3) continue; // keep the traffic-light cell's own color
         excelRow.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
       }
     }
@@ -143,11 +162,12 @@ export async function buildProcessDashboardWorkbook(
 
   sheet.getColumn(1).width = 10;
   sheet.getColumn(2).width = 12;
-  sheet.getColumn(3).width = 16;
-  sheet.getColumn(4).width = 10;
-  sheet.getColumn(5).width = 16;
-  sheet.getColumn(6).width = 10;
-  sheet.getColumn(7).width = 8;
+  sheet.getColumn(3).width = 9;
+  sheet.getColumn(4).width = 16;
+  sheet.getColumn(5).width = 10;
+  sheet.getColumn(6).width = 16;
+  sheet.getColumn(7).width = 10;
+  sheet.getColumn(8).width = 8;
 
   return wb.xlsx.writeBuffer();
 }

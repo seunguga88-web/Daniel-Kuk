@@ -100,10 +100,14 @@ describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
     }
     expect(config3Row).toBeGreaterThan(0);
     expect(sheet.getCell(config3Row, 1).value).toBe("Line 1");
-    expect(sheet.getCell(config3Row, 3).value).toBe("Process 11");
-    expect(sheet.getCell(config3Row, 4).value).toBe("대기 중");
-    expect(sheet.getCell(config3Row, 5).value).toBe("2026-08-13");
-    expect(sheet.getCell(config3Row, 6).value).toBe(0);
+    expect(sheet.getCell(config3Row, 3).value).toBe("Green"); // on-time -> green traffic light
+    expect(sheet.getCell(config3Row, 4).value).toBe("Process 11");
+    expect(sheet.getCell(config3Row, 5).value).toBe("대기 중");
+    expect(sheet.getCell(config3Row, 6).value).toBe("2026-08-13");
+    expect(sheet.getCell(config3Row, 7).value).toBe(0);
+
+    const lightFill = sheet.getCell(config3Row, 3).fill as ExcelJS.FillPattern;
+    expect(lightFill.fgColor?.argb).toBe("FF22C55E");
   });
 
   it("leaves not-started Configs' cells blank rather than filling in placeholder text", async () => {
@@ -123,9 +127,10 @@ describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
       }
     }
     expect(config2Row).toBeGreaterThan(0);
-    expect(sheet.getCell(config2Row, 3).value).toBeFalsy();
-    expect(sheet.getCell(config2Row, 5).value).toBeFalsy();
+    expect(sheet.getCell(config2Row, 3).value).toBeFalsy(); // no traffic light either
+    expect(sheet.getCell(config2Row, 4).value).toBeFalsy();
     expect(sheet.getCell(config2Row, 6).value).toBeFalsy();
+    expect(sheet.getCell(config2Row, 7).value).toBeFalsy();
   });
 });
 

@@ -13,7 +13,7 @@ import {
   type YieldStatus,
 } from "@/lib/yieldAnalysis";
 import { DEFAULT_SCHEDULE_THRESHOLDS, type ScheduleThresholds } from "@/lib/scheduleAnalysis";
-import { listSnapshots, computeCurrentStatus, type Snapshot } from "@/lib/currentStatus";
+import { listSnapshots, computeCurrentStatus, trafficLight, type Snapshot, type TrafficLight } from "@/lib/currentStatus";
 import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
@@ -39,6 +39,12 @@ const STATUS_COLOR: Record<YieldStatus, string> = {
   risk: "#fecaca",
   warning: "#fef08a",
   normal: "transparent",
+};
+
+const TRAFFIC_LIGHT_COLOR: Record<NonNullable<TrafficLight>, string> = {
+  green: "#22c55e",
+  yellow: "#eab308",
+  red: "#ef4444",
 };
 
 const STATUS_LABEL: Record<YieldStatus, string> = {
@@ -432,6 +438,7 @@ export default function Home() {
                   <thead>
                     <tr>
                       <th style={cellStyle}>Config</th>
+                      <th style={cellStyle}>신호등</th>
                       <th style={cellStyle}>현재 대기 Process</th>
                       <th style={cellStyle}>상태</th>
                       <th style={cellStyle}>Daily Plan 계획일</th>
@@ -448,14 +455,30 @@ export default function Home() {
                             <td style={cellStyle}></td>
                             <td style={cellStyle}></td>
                             <td style={cellStyle}></td>
+                            <td style={cellStyle}></td>
                           </tr>
                         );
                       }
                       const bg =
                         row.alarmLevel === "risk" ? STATUS_COLOR.risk : row.alarmLevel === "warning" ? STATUS_COLOR.warning : "transparent";
+                      const light = trafficLight(row);
                       return (
                         <tr key={row.config} style={{ background: bg }}>
                           <td style={cellStyle}>{row.config}</td>
+                          <td style={cellStyle}>
+                            {light && (
+                              <span
+                                title={light}
+                                style={{
+                                  display: "inline-block",
+                                  width: "0.8rem",
+                                  height: "0.8rem",
+                                  borderRadius: "50%",
+                                  background: TRAFFIC_LIGHT_COLOR[light],
+                                }}
+                              />
+                            )}
+                          </td>
                           <td style={cellStyle}>{row.currentProcess}</td>
                           <td style={cellStyle}>{row.processState === "completed" ? "완료" : "대기 중"}</td>
                           <td style={cellStyle}>{row.planDate}</td>
