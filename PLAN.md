@@ -23,6 +23,7 @@
 **PLAN.md 문서에 정의된 6개 Phase 모두 완료.** "되면 좋은" 3개 항목(출하 수정 이력, NG Material 원인분석, Excel 다운로드 — 이 중 Yield/Process Dashboard 2개는 이미 만듦)은 이번 세션에서 다루지 않기로 한 대로 남겨둠.
 - ✅ **(범위 외 추가 요청) 전체 디자인 개선**: 인라인 스타일 위주였던 화면을 globals.css 중심의 디자인 시스템으로 정리(색상·간격·타이포그래피 변수, 카드형 섹션, 고정 상단 메뉴, 다듬어진 표/버튼/입력창 스타일, 부드러운 상태 배경색, 다크모드 대응). 로직/계산 코드는 손대지 않고 화면만 개선. tsc/vitest(57/57)/eslint 모두 통과, 브라우저에서 확인. 코드 위치: `process-dashboard/app/globals.css`, `process-dashboard/app/page.tsx`.
 - ✅ **(범위 외 추가 요청) Shipment Risk·Shipment Draft Excel 다운로드**: 나머지 세 화면(Upload Center 제외 전부)에 Excel 다운로드 완비. Shipment Risk는 Config별 판정 행에 색을 입혀서, Shipment Draft는 Config별 블록(제목+Destination표)을 시트 하나에 순서대로 기록. 자동 테스트 3개 추가(60/60 전체 통과, 셀 좌표 직접 검증) + 브라우저에서 실제 다운로드해 ExcelJS로 재확인.
+- ✅ **("되면 좋은" 항목 완료) Shipment History — 출하 수정 이력**: 원본 데이터에 실제 "Shipment Row ID" 컬럼이 없어서, Config+Destination+Label 조합을 행 식별자 대체값으로 사용(결정 사항, 1:1 코칭에서 확인 필요 — 실제 Row ID가 생기면 그걸로 바꿔야 함). Config 출하 테이블을 다시 업로드할 때마다 직전 업로드와 자동 비교해서 신규/수정/삭제 행을 감지하고, 새 섹션(Shipment History)에 **덮어쓰지 않고 누적** 기록(localStorage, Phase6 저장 방식 재사용). 자동 테스트 9개 추가(diff 로직 6개 + 누적 저장 3개, 69/69 전체 통과). **브라우저에서 실제로 검증**: 가상데이터 5개를 한 번 업로드(이력 없음 확인) → Config 출하 테이블만 Qty 하나를 600→650으로 바꾼 버전으로 다시 업로드 → Shipment History에 "Config 1 / Destination 1 / 수정 / Qty / 600→650"이 정확히 기록되는 것 확인. 코드 위치: `process-dashboard/lib/shipmentHistory.ts`, `process-dashboard/lib/persistence.ts`(recordUpload로 확장), 테스트: `process-dashboard/tests/shipmentHistory.test.ts`, `process-dashboard/tests/persistence.test.ts`.
 
 ## ① 문제 정의 — 지금 무엇이 불편한가
 
@@ -50,9 +51,9 @@
   5. 출하 D-1 Destination별 출하 초안 자동생성 (기본 우선순위는 Destination 1,2,3,4 순서이고, 화면에서 전체 Destination 공통 우선순위를 변경 가능. 변경 시 그 순서대로 OK 배정)
 
 - **되면 좋은**:
-  - 출하 수정 이력 관리 (Shipment Row ID 기준 변경 전후 추적)
+  - 출하 수정 이력 관리 (Shipment Row ID 기준 변경 전후 추적) — ✅ 완료, "진행 상황" 참고
   - NG Material 원인분석 질문 + 비교 Config 추천
-  - 분석 결과 Excel 다중시트 다운로드 (Yield/NG Analysis·Process Dashboard 2개는 사용자 요청으로 완료 — "진행 상황" 참고. Risk판정·D-1초안·출하 이력은 아직 안 만들어졌으니 남은 항목)
+  - 분석 결과 Excel 다중시트 다운로드 (Yield/NG Analysis·Process Dashboard·Shipment Risk·Shipment Draft 4개 완료 — "진행 상황" 참고. 출하 이력은 미구현)
 
 - **이번엔 안 하는 것**:
   - 로그인·역할별 권한, 감사 로그, 백업 정책 등 운영 기능

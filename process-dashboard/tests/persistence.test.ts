@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { saveUpload, loadUpload, clearUpload } from "../lib/persistence";
-import type { ParsedDataset } from "../lib/types";
+import { saveUpload, loadUpload, clearUpload, recordUpload, loadShipmentHistory } from "../lib/persistence";
+import type { ParsedDataset, ShipmentTableRecord } from "../lib/types";
 
 // vitest runs these tests in a plain Node environment (no DOM), so provide a
 // minimal in-memory localStorage polyfill for the module to talk to.
@@ -60,5 +60,51 @@ describe("upload persistence", () => {
       "{not valid json"
     );
     expect(loadUpload()).toBeNull();
+  });
+});
+
+function shipmentRow(overrides: Partial<ShipmentTableRecord>): ShipmentTableRecord {
+  return {
+    config: "Config 1",
+    destination: "Destination 1",
+    date: "2026-08-15",
+    qty: 600,
+    label: "OK",
+    waiverStatus: "N/A",
+    cause: "-",
+    ...overrides,
+  };
+}
+
+describe("recordUpload: accumulates shipment history across uploads", () => {
+  it("records no history on the very first upload (nothing to compare against)", () => {
+    const ds = { ...sampleDataset, shipmentTable: [shipmentRow({})] };
+    const newEntries = recordUpload(ds, []);
+    expect(newEntries).toEqual([]);
+    expect(loadShipmentHistory()).toEqual([]);
+  });
+
+  it("diffs against the previous upload and appends (doesn't overwrite) history", () => {
+    const v1 = { ...sampleDataset, shipmentTable: [shipmentRow({ qty: 600 })] };
+    recordUpload(v1, []);
+
+    const v2 = { ...sampleDataset, shipmentTable: [shipmentRow({ qty: 650 })] };
+    const secondEntries = recordUpload(v2, []);
+    expect(secondEntries).toHaveLength(1);
+    expect(secondEntries[0]).toMatchObject({ changeType: "modified", field: "qty", oldValue: 600, newValue: 650, uploadVersion: 2 });
+
+    const v3 = { ...sampleDataset, shipmentTable: [shipmentRow({ qty: 650 }), shipmentRow({ destination: "Destination 2", qty: 150 })] };
+    recordUpload(v3, []);
+
+    const history = loadShipmentHistory();
+    expect(history).toHaveLength(2); // v1->v2 modification, plus v2->v3 addition, never cleared
+    expect(history[0].uploadVersion).toBe(2);
+    expect(history[1]).toMatchObject({ changeType: "added", destination: "Destination 2", uploadVersion: 3 });
+  });
+
+  it("still persists the new upload as the latest even when there's nothing to diff", () => {
+    const ds = { ...sampleDataset, shipmentTable: [shipmentRow({})] };
+    recordUpload(ds, []);
+    expect(loadUpload()!.dataset).toEqual(ds);
   });
 });

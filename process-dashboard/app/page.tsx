@@ -22,7 +22,8 @@ import {
   buildShipmentRiskWorkbook,
   buildShipmentDraftWorkbook,
 } from "@/lib/exportExcel";
-import { saveUpload, loadUpload } from "@/lib/persistence";
+import { loadUpload, recordUpload, loadShipmentHistory } from "@/lib/persistence";
+import type { ShipmentHistoryEntry } from "@/lib/shipmentHistory";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 function SnapshotPicker({
@@ -109,6 +110,20 @@ const STATUS_LABEL: Record<YieldStatus, string> = {
   normal: "정상",
 };
 
+const CHANGE_TYPE_LABEL: Record<ShipmentHistoryEntry["changeType"], string> = {
+  added: "신규",
+  modified: "수정",
+  removed: "삭제",
+};
+
+const FIELD_LABEL: Record<string, string> = {
+  date: "Date",
+  qty: "Qty",
+  label: "Label",
+  waiverStatus: "Waiver Status",
+  cause: "Cause",
+};
+
 function processNum(name: string): number {
   const m = name.match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 0;
@@ -119,6 +134,7 @@ export default function Home() {
   const [unrecognizedFiles, setUnrecognizedFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [shipmentHistory, setShipmentHistory] = useState<ShipmentHistoryEntry[]>([]);
 
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [targetYieldInputs, setTargetYieldInputs] = useState<Record<string, string>>({});
@@ -137,6 +153,7 @@ export default function Home() {
       setUnrecognizedFiles(stored.unrecognizedFiles);
       setLastSavedAt(stored.savedAt);
     }
+    setShipmentHistory(loadShipmentHistory());
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -153,8 +170,9 @@ export default function Home() {
       const parsed = parseAllFiles(inputs);
       setDataset(parsed.dataset);
       setUnrecognizedFiles(parsed.unrecognizedFiles);
-      saveUpload(parsed.dataset, parsed.unrecognizedFiles);
+      recordUpload(parsed.dataset, parsed.unrecognizedFiles);
       setLastSavedAt(new Date().toISOString());
+      setShipmentHistory(loadShipmentHistory());
     } finally {
       setLoading(false);
     }
@@ -363,6 +381,7 @@ export default function Home() {
             <a href="#process">Process Dashboard</a>
             <a href="#risk">Shipment Risk</a>
             <a href="#draft">Shipment Draft</a>
+            <a href="#history">Shipment History</a>
             {lastSavedAt && (
               <span className="topnav-meta">
                 마지막 업로드 저장: {new Date(lastSavedAt).toLocaleString("ko-KR")} (새로고침해도 유지됩니다)
@@ -731,6 +750,48 @@ export default function Home() {
                   </table>
                 </div>
               ))
+            )}
+          </section>
+
+          <section id="history">
+            <h2 style={sectionTitle}>Shipment History — 출하 수정 이력</h2>
+            <p style={{ color: "var(--muted)" }}>
+              Config 출하 테이블을 다시 업로드할 때마다 이전 업로드와 비교해 바뀐 내용을 여기 누적 기록합니다(덮어쓰지 않음). Config·Destination·Label
+              조합으로 행을 식별합니다(원본 데이터에 별도 Row ID가 없어 대체).
+            </p>
+            {shipmentHistory.length === 0 ? (
+              <p style={{ color: "var(--muted)" }}>아직 기록된 변경 이력이 없습니다. Config 출하 테이블을 수정해서 다시 업로드하면 여기 쌓입니다.</p>
+            ) : (
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={cellStyle}>변경 시각</th>
+                    <th style={cellStyle}>업로드 버전</th>
+                    <th style={cellStyle}>Config</th>
+                    <th style={cellStyle}>Destination</th>
+                    <th style={cellStyle}>구분</th>
+                    <th style={cellStyle}>변경 항목</th>
+                    <th style={cellStyle}>변경 전</th>
+                    <th style={cellStyle}>변경 후</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...shipmentHistory]
+                    .sort((a, b) => (a.changedAt < b.changedAt ? 1 : -1))
+                    .map((e, i) => (
+                      <tr key={i}>
+                        <td style={cellStyle}>{new Date(e.changedAt).toLocaleString("ko-KR")}</td>
+                        <td style={cellStyle}>{e.uploadVersion}</td>
+                        <td style={cellStyle}>{e.config}</td>
+                        <td style={cellStyle}>{e.destination}</td>
+                        <td style={cellStyle}>{CHANGE_TYPE_LABEL[e.changeType]}</td>
+                        <td style={cellStyle}>{e.field ? (FIELD_LABEL[e.field] ?? e.field) : ""}</td>
+                        <td style={cellStyle}>{e.oldValue ?? ""}</td>
+                        <td style={cellStyle}>{e.newValue ?? ""}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             )}
           </section>
         </>
