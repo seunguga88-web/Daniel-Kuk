@@ -1,0 +1,559 @@
+공정·출하 모니터링 툴 구현안
+========================================
+
+작성 기준
+- 업로드된 가상데이터 Excel 5개
+- 사용자 환경: Chrome에서 입력, 조회, 분석, Excel 다운로드
+- 시간대: Asia/Seoul
+
+
+1. 프로젝트 목적
+----------------------------------------
+
+회사에서 사용하는 5종의 Excel 파일을 웹에서 업로드하면 데이터를 자동으로 결합하여 다음 업무를 지원한다.
+
+1) Config별 공정 진척 및 Daily Plan 대비 일정 편차 확인
+2) Process별 수율과 이상점 자동 탐지
+3) 수율 감소로 인한 양품 출하 부족 위험 사전 확인
+4) NG 다발 공정의 Material commonality 분석 지원
+5) 출하일 1일 전 Destination별 출하 테이블 초안 생성
+6) 출하 완료 후 사람이 수정한 출하 테이블의 변경 이력 관리
+7) 공정·출하 분석 결과를 Excel로 다운로드
+
+공정 모니터링과 출하 모니터링은 별도 프로그램으로 나누지 않고 하나의 Chrome 웹앱 안에서 메뉴로 구분하는 방식이 적합하다.
+
+
+2. 입력 Excel 파일과 업데이트 주기
+----------------------------------------
+
+[1] Config 정보
+- 주요 데이터: Config, Input Qty, Shipment Qty, Material 1~7의 Type
+- 업데이트: Material 구성이나 수량 등 변경사항 발생 시
+
+[2] Config별 출하 Plan
+- 주요 데이터: Config별 Total Shipment, Destination 1~4 계획 수량
+- 업데이트: 출하 계획 변경 시
+
+[3] Daily Plan
+- 주요 데이터: Line별 Process 1~15 계획일, Ship Date, OK Ship, Waiver NG, Status
+- 업데이트: 생산 일정 또는 출하 계획 변경 시
+
+[4] 공정 Status
+- 주요 데이터: 기준일, 기준시간, Line, Config, Process별 Input·Output·NG, Good Qty, Defect Qty, Major Defect
+- 업데이트: 매일 오전 9시와 오후 6시
+
+[5] Config 출하 테이블
+- 주요 데이터: Config, Destination, Date, Qty, Label, Waiver Status, Cause
+- 시스템이 출하일 1일 전에 초안을 생성
+- 출하 완료 후 사람이 실제 결과를 반영해 수정한 Excel을 다시 업로드
+
+
+3. 파일 간 연결 관계
+----------------------------------------
+
+핵심 연결키는 Config이다.
+
+정상 수량 검증식:
+- Config 정보의 Shipment Qty
+  = Config별 출하 Plan의 Total Shipment
+  = Daily Plan의 OK Ship + Waiver NG
+
+- Destination 1~4 계획 수량 합계
+  = Total Shipment
+
+- 각 Process의 Input
+  = Output + NG
+
+- 이전 Process의 Output
+  = 다음 Process의 Input
+
+업로드 파일에 위 관계가 맞지 않으면 분석을 진행하기 전에 오류 위치와 원인을 사용자에게 표시한다.
+
+
+4. 업로드 가상데이터에서 확인된 대표 사례
+----------------------------------------
+
+공정 Status는 8월 5일부터 8월 21일까지 오전 9시·오후 6시, 총 34개 시점으로 구성되어 있다.
+
+Config 2:
+- Process 7 수율: 약 79.5%
+- Process 11 수율: 약 74.1%
+- 최종 양품: 800개
+- 총 출하 계획: 1,000개
+- 양품 부족: 200개
+- Daily Plan상 승인 Waiver NG: 200개
+
+Config 4:
+- Process 7 수율: 80.0%
+- Process 11 수율: 약 71.4%
+- 최종 양품: 900개
+- 총 출하 계획: 1,200개
+- 양품 부족: 300개
+- Daily Plan상 승인 Waiver NG: 300개
+
+다른 Config의 Process 7·11 수율은 대체로 약 97~98%이다. 따라서 Config 2와 Config 4의 Process 7·11은 수율 이상점으로 자동 검출되어야 한다.
+
+출하 이력 사례:
+- Config 2: 계획 출하일 8월 15일, Waiver NG 물량은 8월 17일 출하
+- Config 4: 계획 출하일 8월 17일, Waiver NG 물량은 8월 18일 출하
+- 최종적으로 Destination별 계획 수량은 모두 충족
+
+
+5. 전체 시스템 동작
+----------------------------------------
+
+1) 사용자가 Chrome에서 Excel을 업로드한다.
+2) 시스템이 파일의 헤더와 구조로 파일 종류를 판별한다.
+3) 필수 열, Config, 날짜, 수량 정합성을 검증한다.
+4) 원본 파일을 업로드 버전별로 보관한다.
+5) Excel 데이터를 분석 가능한 표준 데이터 구조로 변환한다.
+6) 공정 분석 엔진과 출하 분석 엔진을 실행한다.
+7) Dashboard와 예외 알림을 갱신한다.
+8) 사용자는 분석 결과와 출하 초안을 Excel로 다운로드한다.
+
+파일명은 변경될 수 있으므로 파일명에만 의존해서는 안 된다. 헤더와 표 구조를 이용하여 파일 종류를 식별해야 한다.
+
+
+6. Config별 공정 현황
+----------------------------------------
+
+6.1 Daily Plan 대비 일정 편차
+
+각 Config·Process별로 다음 값을 계산한다.
+
+일정 편차(일) = 실제 Output 최초 발생일 - Daily Plan 계획일
+
+표시 기준:
+- 0일: 계획 준수
+- 양수: 지연
+- 음수: 선행
+- Input만 존재하고 Output이 없을 때: 진행 중
+- 계획일이 지났지만 Output이 없을 때: 지연
+
+함께 표시할 항목:
+- 계획상 완료되어야 할 Process
+- 실제 완료 Process
+- 공정 단계 차이
+- 가장 많이 지연된 Process
+- 최종 Process 완료 예상일
+
+Daily Plan의 날짜를 해당 공정의 시작 계획일로 볼지 완료 목표일로 볼지는 실제 업무 규칙 확인이 필요하다. MVP에서는 해당 날짜 안에 Output 완료가 필요한 완료 목표일로 사용하는 것을 권장한다.
+
+
+6.2 Process별 수율
+
+계산식:
+- Process 수율 = Output / Input
+- NG율 = NG / Input
+- 누적 수율 = 현재 Good Qty / 최초 Input Qty
+
+초기 이상점 기준 예시:
+- 위험(빨간색): 수율 90% 미만 또는 동일 Process의 기준 수율보다 10%p 이상 낮음
+- 주의(노란색): 수율 97% 미만 또는 기준 수율보다 5%p 이상 낮음
+- 정상: 그 외
+
+동일 Process 기준 수율은 최근 정상 Lot 또는 여러 Config의 중간값을 사용할 수 있다. 고정 기준값을 코드에 넣지 않고 관리자 화면에서 변경 가능하게 만든다.
+
+이상점 알림 내용:
+- Config 이름
+- Line
+- Process 이름
+- Input, Output, NG
+- 현재 수율
+- 기준 수율과 차이
+- 최초 감지 시각
+- 출하에 미치는 영향
+
+
+6.3 양품 출하 부족 Risk
+
+기본 출하 원칙은 양품 출하이다.
+
+예상 최종 양품 계산 예시:
+예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율
+
+양품 부족 예상 = Total Shipment - 예상 최종 양품
+
+상태 구분:
+- OK: 예상 양품만으로 출하 가능
+- Risk: 예상 양품이 출하 계획보다 부족할 가능성 있음
+- Waiver Dependent: 양품은 부족하지만 승인된 Waiver NG를 합하면 충족 가능
+- Shortage: 양품과 승인 Waiver NG를 합해도 부족
+
+Config 2와 Config 4는 가상데이터 최종 시점에서 Waiver Dependent로 표시된다.
+
+
+7. NG 다발 공정과 Material Commonality 분석
+----------------------------------------
+
+7.1 사람에게 확인하는 흐름
+
+NG 이상이 감지되면 단순 알림으로 종료하지 않고 NG 분석 Case를 생성한다.
+
+질문 예시:
+"Config 2의 Process 7 수율이 79.5%로 기준 대비 급락했습니다. 이 불량과 관련 있다고 판단되는 Material을 선택해 주세요."
+
+사용자 입력 항목:
+- 관련 Material
+- Material Type
+- Material Lot
+- 사용 설비
+- Defect Mode
+- 판단 근거 또는 메모
+- 확인자와 확인 시각
+
+
+7.2 비교 Config 추천 규칙
+
+Material 답변을 받은 뒤 다음 순서로 비교 Config를 추천한다.
+
+1) 같은 Line의 Config 우선
+2) 선택한 Material Type이 같은 Config
+3) 나머지 Material 구성의 차이가 가장 적은 Config
+4) 선택한 Material만 반대 Type이고 나머지가 유사한 대조 Config
+5) 설비 정보가 있으면 같은 설비 사용 Config 우선
+
+가상데이터 예시:
+
+Config 2에서 Material 2 Type 2가 의심되는 경우:
+- Config 1: Material 2가 반대 Type인 대조군
+- Config 6: Material 2 Type 2가 동일한 commonality 확인군
+
+Config 4에서 Material 4 Type 2가 의심되는 경우:
+- Config 1: Material 4가 반대 Type인 대조군
+- Config 8: Material 4 Type 2가 동일한 비교군
+
+현재 공정 Status 파일에는 설비명이 없으므로 설비 commonality를 자동 분석하려면 다음 중 하나가 필요하다.
+- 공정 Status에 Equipment 열 추가
+- NG Case에서 사람이 설비를 입력
+
+
+8. Config별 출하 현황
+----------------------------------------
+
+8.1 출하일 1일 전 초안 생성
+
+권장 실행 시점:
+- 출하일 전날 오전 9시 공정 Status 업로드가 끝난 직후
+
+처리 순서:
+1) Daily Plan에서 다음 날 출하 대상 Config를 찾는다.
+2) 최신 공정 Status에서 현재 양품과 예상 최종 양품을 계산한다.
+3) Config별 출하 Plan에서 Destination별 계획 수량을 가져온다.
+4) OK 출하 가능 수량과 Waiver 필요 수량을 계산한다.
+5) Destination별 출하 테이블 초안을 만든다.
+6) Dashboard에 초안 준비 완료를 표시한다.
+7) 사용자가 Excel 초안을 다운로드한다.
+
+OK 물량이 전체 Destination 계획보다 부족할 때 어느 Destination부터 OK를 우선 배정할지는 회사의 실제 우선순위 규칙을 확인해야 한다. MVP에서는 Destination 1부터 순서대로 배정하거나 관리자가 우선순위를 설정하도록 만든다.
+
+
+8.2 출하 테이블에 추가할 관리 열
+
+기존 열:
+- Config
+- Destination
+- Date
+- Qty
+- Label
+- Waiver Status
+- Cause
+
+권장 추가 열:
+- Shipment Row ID
+- Shipment Status: Draft / Shipped / Cancelled
+- Manual Comment
+- Draft Version
+- Updated By
+- Updated At
+
+Shipment Row ID는 사용자가 날짜나 수량을 수정해도 변경되지 않아야 한다. 이 ID가 있어야 시스템 초안과 사람이 수정한 실제 결과를 정확하게 비교할 수 있다.
+
+
+8.3 수동 수정 이력
+
+출하 완료 후 수정된 Excel이 업로드되면 Shipment Row ID를 기준으로 다음 이력을 저장한다.
+
+- 변경 시각
+- Config
+- Destination
+- 변경 항목
+- 변경 전 값
+- 변경 후 값
+- 업로드 사용자
+- 업로드 파일 버전
+
+신규 행, 수정 행, 삭제 행을 구분한다. 이력은 덮어쓰지 않고 누적 보관한다.
+
+
+8.4 Destination별 출하 현황
+
+표시 항목:
+- Config
+- Destination
+- 계획 수량
+- OK 출하 수량
+- Waiver NG 출하 수량
+- 총 출하 수량
+- 추가 필요 수량
+- 최초 출하일
+- 최종 출하일
+- 출하 상태
+
+추가 필요 수량 = MAX(계획 수량 - 총 출하 수량, 0)
+
+출하 상태:
+- 미출하
+- 부분 출하
+- 완료
+- 초과 출하
+
+
+9. 화면 구성
+----------------------------------------
+
+[1] Upload Center
+- 5개 파일의 최근 업로드 시각과 업로드 사용자
+- 최신 버전과 이전 버전
+- 파일 형식 및 수량 검증 결과
+- 오전 9시·오후 6시 공정 Status 업로드 여부
+- 누락 또는 오류 알림
+
+[2] Process Dashboard
+- Config별 계획 Process와 실제 Process
+- 일정 편차
+- 현재 Good Qty와 누적 Defect Qty
+- 예상 최종 양품
+- 출하 부족 Risk
+
+[3] Yield / NG Analysis
+- Config × Process 수율 Heatmap
+- 이상점 목록
+- Process별 수율 추이
+- NG 분석 질문과 사용자 답변
+- Material commonality 비교 Config 추천
+
+[4] Shipment Dashboard
+- D-1 출하 대상
+- 출하 초안 생성 상태
+- Config·Destination별 계획 및 실적
+- OK와 Waiver NG 구분
+- 추가 필요 수량
+
+[5] Shipment History
+- 초안 버전
+- 실제 업로드 버전
+- 변경 전후 이력
+- 사용자 및 변경 시각
+
+
+10. 분석 결과 Excel 다운로드 구성
+----------------------------------------
+
+다운로드 파일은 다음 시트로 구성한다.
+
+1) Summary
+2) Process Schedule Variance
+3) Process Yield
+4) Shipment Risk
+5) NG Commonality
+6) Destination Status
+7) Shipment History
+8) Upload Log
+
+필터, 틀 고정, 날짜·수량·수율 서식, 위험 상태 색상 표시를 적용한다.
+
+
+11. 권장 기술 구성
+----------------------------------------
+
+가상데이터 및 초기 MVP:
+- Frontend/Server: Next.js + TypeScript
+- Database/Auth/File Storage: Supabase
+- Excel 읽기: SheetJS
+- 서식이 적용된 Excel 생성: ExcelJS
+- 예약 실행: Supabase Cron
+- 배포: Vercel 또는 회사 내부 서버
+
+회사 실제 데이터 적용 시:
+- 외부 클라우드 사용 승인을 먼저 확인한다.
+- 승인이 없으면 회사 내부 서버와 PostgreSQL에 배포한다.
+- 사용자는 어느 방식이든 Chrome 주소만 열어 사용한다.
+- 사용자 로그인, 역할별 권한, 감사 로그, 백업 정책을 적용한다.
+
+참고 공식 문서:
+- Next.js Route Handler: https://nextjs.org/docs/app/api-reference/file-conventions/route
+- Supabase Storage: https://supabase.com/docs/guides/storage/uploads/standard-uploads
+- Supabase Cron: https://supabase.com/docs/guides/cron
+- Supabase Row Level Security: https://supabase.com/docs/guides/database/postgres/row-level-security
+- SheetJS Excel 읽기: https://docs.sheetjs.com/docs/api/parse-options/
+- SheetJS Excel 쓰기: https://docs.sheetjs.com/docs/api/write-options/
+- ExcelJS: https://github.com/exceljs/exceljs
+
+
+12. 데이터베이스 주요 테이블
+----------------------------------------
+
+권장 테이블:
+- uploads: 원본 파일 업로드와 버전
+- configs: Config 기본 정보와 수량
+- config_materials: Config별 Material 및 Type
+- shipment_plans: Config·Destination별 출하 계획
+- daily_process_plans: Config·Process별 계획일과 Line
+- process_snapshots: 오전 9시·오후 6시 Snapshot
+- process_results: Snapshot별 Input, Output, NG
+- shipment_requirements: Ship Date, OK Ship, Waiver NG
+- shipment_drafts: 출하 초안 버전
+- shipment_rows: Destination별 출하 행과 Row ID
+- shipment_change_history: 출하 수정 전후 이력
+- alerts: 일정·수율·출하 위험 알림
+- ng_cases: NG 이상점 분석 Case
+- ng_case_answers: Material·설비·원인에 대한 사람 답변
+
+
+13. 구현 순서
+----------------------------------------
+
+1단계: 5개 Excel Parser
+- 각 파일 구조를 읽고 표준 데이터로 변환
+- 파일 형식과 수량 관계 검증
+- 가상데이터 자동 테스트
+
+2단계: 데이터베이스 및 버전 관리
+- 원본 파일 보관
+- 업로드 버전과 사용자 기록
+- 표준 데이터 저장
+
+3단계: 공정 분석 엔진
+- 일정 편차
+- Process 수율
+- 이상점
+- 예상 최종 양품
+- 출하 부족 Risk
+
+4단계: 공정 Dashboard와 알림
+- Config 요약
+- Process Heatmap
+- NG Case와 사용자 질문
+
+5단계: 출하 분석 엔진
+- D-1 출하 대상 추출
+- Destination별 초안 생성
+- OK·Waiver 배정
+
+6단계: 출하 수정 이력
+- Shipment Row ID
+- 초안과 실제 업로드 비교
+- 변경 이력 누적
+
+7단계: 분석 Excel 다운로드
+- 공정·출하 분석 결과의 다중 시트 보고서
+
+8단계: 운영 기능
+- 로그인과 권한
+- 업로드 누락 알림
+- 백업
+- 감사 로그
+- 회사 내부 배포 검토
+
+
+14. 필수 검증 및 자동 테스트
+----------------------------------------
+
+- 모든 파일의 Config 목록이 일치하는가
+- Shipment Qty = Total Shipment = OK Ship + Waiver NG인가
+- Destination 합계 = Total Shipment인가
+- Process별 Input = Output + NG인가
+- 이전 Process Output = 다음 Process Input인가
+- Waiver NG 출하 행은 Waiver Approved 상태인가
+- 동일 날짜·시간의 공정 Status 중복 업로드를 식별하는가
+- 출하 초안 재생성 시 버전을 구분하는가
+- 수정된 출하 테이블의 신규·수정·삭제 행을 정확히 구분하는가
+- 날짜와 예약 실행이 Asia/Seoul 기준으로 동작하는가
+
+
+15. 개발 시작용 바이브코딩 프롬프트
+----------------------------------------
+
+Next.js와 TypeScript로 사내 공정·출하 모니터링 웹앱을 만들어줘.
+사용자는 Chrome에서만 접속하며 5종의 XLSX 파일을 업로드한다.
+
+입력 파일:
+1. Config 정보: Config별 Input Qty, Shipment Qty, Material 1~7의 Type
+2. Config별 출하 Plan: Config·Destination별 계획 수량
+3. Daily Plan: Line별 Process 1~15 계획일, Ship Date, OK Ship, Waiver NG
+4. 공정 Status: 날짜와 9AM/6PM 시점별 Config·Process의 Input, Output, NG
+5. Config 출하 테이블: Config, Destination, Date, Qty, Label, Waiver Status, Cause
+
+파일명에 의존하지 말고 셀 헤더와 구조로 파일 종류를 판별해라.
+원본 파일은 버전별로 보관하고 파싱 결과는 정규화된 DB 테이블에 저장해라.
+
+먼저 UI를 만들지 말고 5개 Parser와 Validation Test를 작성해라.
+
+검증 규칙:
+- Config가 모든 파일에서 일치하는지 확인
+- Shipment Qty = Total Shipment = OK Ship + Waiver NG 확인
+- Destination 합계 = Total Shipment 확인
+- 각 Process에서 Input = Output + NG 확인
+- 이전 Process Output = 다음 Process Input 확인
+- Waiver NG 출하는 Waiver Approved 상태인지 확인
+
+공정 분석:
+- Process별 Plan Date와 실제 Output 최초 시각의 일정 편차
+- Process Yield = Output / Input
+- Process별 중간 수율 대비 이상점 탐지
+- 남은 Process 기준 수율을 이용한 최종 양품 예상
+- 양품 출하 부족 및 Waiver 의존 Risk 표시
+- NG 이상 발생 시 사용자에게 관련 Material, Lot, Equipment를 질문
+- 답변 후 같은 Line, 같은 Material Type, 다른 Material 차이가 적은 순으로 비교 Config 추천
+
+출하 분석:
+- Ship Date D-1 오전 공정 데이터 이후 Destination별 출하 초안 생성
+- 초안 행마다 Shipment Row ID 생성
+- 출하 후 수정된 Excel 재업로드 시 변경 전후 이력 저장
+- Destination별 Plan, OK, Waiver NG, Total, Additional Qty 표시
+
+화면:
+- Upload Center
+- Process Dashboard
+- Yield / NG Analysis
+- Shipment Dashboard
+- Shipment History
+
+분석 결과를 여러 시트가 포함된 XLSX로 다운로드할 수 있게 해라.
+시간대는 Asia/Seoul을 사용하고 모든 계산 로직에 자동 테스트를 작성해라.
+
+
+16. 구현 전 확정할 업무 규칙
+----------------------------------------
+
+개발 전에 아래 항목을 현업과 확정하면 재작업을 줄일 수 있다.
+
+1) Daily Plan 날짜가 공정 시작일인지 완료 목표일인지
+2) 수율 위험·주의 기준값
+3) 출하 Risk를 계산할 때 사용할 기준 수율 기간
+4) OK 수량 부족 시 Destination별 우선 배정 순서
+5) Waiver가 승인 전일 때 출하 초안에 포함할지 여부
+6) 공정 Status에 설비명을 추가할 수 있는지
+7) Material Lot 정보를 어느 파일에서 관리할지
+8) 출하 완료의 정의와 Shipment Status 변경 권한
+9) 알림 방식: 웹 화면, 이메일, Teams, Slack 등
+10) 외부 클라우드 사용 가능 여부와 회사 보안 정책
+
+
+결론
+----------------------------------------
+
+현재 5개 가상데이터만으로 다음 MVP를 구현할 수 있다.
+
+- 5개 Excel 업로드와 자동 검증
+- Daily Plan 대비 공정 일정 편차
+- Process별 수율 및 이상점
+- 예상 양품과 출하 부족 Risk
+- NG Material 질문 및 비교 Config 추천
+- 출하일 D-1 Destination별 초안
+- 출하 후 수정 이력
+- Destination별 출하 현황
+- 분석 결과 Excel 다운로드
+
+먼저 Parser와 계산 엔진을 완성하고, 그 결과가 가상데이터의 Config 2·4 사례를 정확히 재현하는지 테스트한 뒤 Dashboard를 개발하는 순서가 가장 안전하다.
