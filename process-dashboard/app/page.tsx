@@ -129,12 +129,23 @@ function processNum(name: string): number {
   return m ? parseInt(m[1], 10) : 0;
 }
 
+const TABS = [
+  { id: "upload", label: "Upload Center" },
+  { id: "yield", label: "Yield / NG Analysis" },
+  { id: "process", label: "Process Dashboard" },
+  { id: "risk", label: "Shipment Risk" },
+  { id: "draft", label: "Shipment Draft" },
+  { id: "history", label: "Shipment History" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
 export default function Home() {
   const [dataset, setDataset] = useState<ParsedDataset | null>(null);
   const [unrecognizedFiles, setUnrecognizedFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [shipmentHistory, setShipmentHistory] = useState<ShipmentHistoryEntry[]>([]);
+  const [activeTab, setActiveTab] = useState<TabId>("upload");
 
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [targetYieldInputs, setTargetYieldInputs] = useState<Record<string, string>>({});
@@ -376,12 +387,16 @@ export default function Home() {
       {dataset && (
         <>
           <nav className="topnav">
-            <a href="#upload">Upload Center</a>
-            <a href="#yield">Yield / NG Analysis</a>
-            <a href="#process">Process Dashboard</a>
-            <a href="#risk">Shipment Risk</a>
-            <a href="#draft">Shipment Draft</a>
-            <a href="#history">Shipment History</a>
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={activeTab === tab.id ? "active" : undefined}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
             {lastSavedAt && (
               <span className="topnav-meta">
                 마지막 업로드 저장: {new Date(lastSavedAt).toLocaleString("ko-KR")} (새로고침해도 유지됩니다)
@@ -389,6 +404,7 @@ export default function Home() {
             )}
           </nav>
 
+          {activeTab === "upload" && (
           <section id="upload">
             <h2 style={sectionTitle}>Upload Center — 파일 인식 결과</h2>
             <ul>
@@ -428,7 +444,9 @@ export default function Home() {
               </table>
             )}
           </section>
+          )}
 
+          {activeTab === "yield" && (
           <section id="yield">
             <h2 style={sectionTitle}>
               Yield / NG Analysis{" "}
@@ -529,7 +547,9 @@ export default function Home() {
               </table>
             </div>
           </section>
+          )}
 
+          {activeTab === "process" && (
           <section id="process">
             <h2 style={sectionTitle}>
               Process Dashboard — 현재 위치 + Daily Plan 대비 지연{" "}
@@ -634,7 +654,9 @@ export default function Home() {
               </div>
             ))}
           </section>
+          )}
 
+          {activeTab === "risk" && (
           <section id="risk">
             <h2 style={sectionTitle}>
               Shipment Risk — 출하 부족 Risk 판정{" "}
@@ -682,7 +704,9 @@ export default function Home() {
               </tbody>
             </table>
           </section>
+          )}
 
+          {activeTab === "draft" && (
           <section id="draft">
             <h2 style={sectionTitle}>
               Shipment Draft — 출하 D-1 초안{" "}
@@ -752,7 +776,9 @@ export default function Home() {
               ))
             )}
           </section>
+          )}
 
+          {activeTab === "history" && (
           <section id="history">
             <h2 style={sectionTitle}>Shipment History — 출하 수정 이력</h2>
             <p style={{ color: "var(--muted)" }}>
@@ -794,6 +820,7 @@ export default function Home() {
               </table>
             )}
           </section>
+          )}
         </>
       )}
     </main>

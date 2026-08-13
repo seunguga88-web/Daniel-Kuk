@@ -153,18 +153,28 @@ input[type="file"]::file-selector-button:hover {
   z-index: 10;
 }
 
-.topnav a {
+.topnav a,
+.topnav button {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--muted);
   padding: 0.4rem 0.75rem;
   border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.topnav a:hover {
+.topnav a:hover,
+.topnav button:hover {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.topnav button.active {
+  background: var(--accent);
+  color: var(--surface);
 }
 
 .topnav-meta {
