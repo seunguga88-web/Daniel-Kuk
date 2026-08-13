@@ -14,6 +14,7 @@ import {
 } from "@/lib/yieldAnalysis";
 import { DEFAULT_SCHEDULE_THRESHOLDS, type ScheduleThresholds } from "@/lib/scheduleAnalysis";
 import { listSnapshots, computeCurrentStatus, trafficLight, type Snapshot, type TrafficLight } from "@/lib/currentStatus";
+import { computeShipmentRisk, type RiskStatus } from "@/lib/shipmentRisk";
 import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
@@ -45,6 +46,13 @@ const TRAFFIC_LIGHT_COLOR: Record<NonNullable<TrafficLight>, string> = {
   green: "#22c55e",
   yellow: "#eab308",
   red: "#ef4444",
+};
+
+const RISK_STATUS_COLOR: Record<RiskStatus, string> = {
+  OK: "transparent",
+  Risk: "#fef08a",
+  "Waiver Dependent": "#fed7aa",
+  Shortage: "#fecaca",
 };
 
 const STATUS_LABEL: Record<YieldStatus, string> = {
@@ -190,6 +198,14 @@ export default function Home() {
     }
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [currentStatusRows]);
+
+  const shipmentRiskRows = useMemo(
+    () =>
+      dataset
+        ? computeShipmentRisk(dataset.processStatus, dataset.shipmentPlan, dataset.shipmentTable, yieldCells, targetYields)
+        : [],
+    [dataset, yieldCells, targetYields]
+  );
 
   async function handleDownloadYieldExcel() {
     try {
@@ -492,6 +508,39 @@ export default function Home() {
                 </table>
               </div>
             ))}
+          </section>
+
+          <section>
+            <h2 style={sectionTitle}>Shipment Risk — 출하 부족 Risk 판정</h2>
+            <p style={{ color: "#555" }}>
+              예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율. 부족분을 승인된 Waiver NG로 채울 수 있는지에 따라 판정합니다.
+            </p>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={cellStyle}>Config</th>
+                  <th style={cellStyle}>현재 양품</th>
+                  <th style={cellStyle}>예상 최종 양품</th>
+                  <th style={cellStyle}>출하 계획</th>
+                  <th style={cellStyle}>승인 Waiver NG</th>
+                  <th style={cellStyle}>부족분</th>
+                  <th style={cellStyle}>판정</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shipmentRiskRows.map((row) => (
+                  <tr key={row.config} style={{ background: RISK_STATUS_COLOR[row.status] }}>
+                    <td style={cellStyle}>{row.config}</td>
+                    <td style={cellStyle}>{row.currentGoodQty}</td>
+                    <td style={cellStyle}>{Math.round(row.expectedFinalGood)}</td>
+                    <td style={cellStyle}>{row.totalShipment}</td>
+                    <td style={cellStyle}>{row.approvedWaiverQty}</td>
+                    <td style={cellStyle}>{Math.round(row.shortfall)}</td>
+                    <td style={cellStyle}>{row.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
         </>
       )}

@@ -12,7 +12,9 @@
   - 추가 피드백 반영: 기준 시점을 날짜/시간 드롭다운 2개로 분리(기존엔 "날짜 시간" 합쳐진 드롭다운 1개)했고, 아직 시작 안 한 Config(Input조차 없음)는 표에서 해당 행을 빈칸으로 표시(이전엔 "process 1"/"미착수"로 채워서 보여줬음). 2026-08-04 9AM 기준으로 Config 1만 process 1에서 시작했고 나머지는 빈칸으로 뜨는 것을 브라우저에서 확인.
 - ✅ **(범위 외 추가 요청) Yield/NG Analysis·Process Dashboard Excel 다운로드**: 원래 "되면 좋은" 항목이었던 "분석 결과 Excel 다운로드"를 사용자 요청으로 두 화면에 한해 먼저 구현. ExcelJS로 각 화면의 데이터를 셀 단위로 쓰고(수율표는 Config×Process 숫자 셀 + 위험/주의 배경색, Process Dashboard는 Line/Config/현재Process/상태/계획일/지연일수/알람을 각각 별도 셀로), 위험/주의 셀은 배경색도 함께 적용. **셀 단위 반영 여부는 자동 테스트(vitest 5개, ExcelJS로 다시 읽어서 특정 셀 좌표의 값·색상을 직접 검증)로 확인했고, 브라우저에서 실제로 다운로드한 파일을 다시 열어(Node에서 ExcelJS로 재확인) Config 2의 Process 7 셀이 79.5와 위험색으로 정확히 들어있는 것까지 확인**. 코드 위치: `process-dashboard/lib/exportExcel.ts`, 테스트: `process-dashboard/tests/exportExcel.test.ts`.
 - ✅ **(범위 외 추가 요청) Process Dashboard 신호등 컬럼**: 화면·Excel 다운로드 둘 다에 추가. 기존 조정 가능한 주의/위험 임계값과는 별개로 고정 규칙(지연 0일 이하=Green, 1일=Yellow, 2일 이상=Red, 완료=Green, 미착수=빈칸)으로 동작. 2026-08-09 9AM 기준 Config 7·9(지연 +1일)가 노란 점으로, 나머지는 초록 점으로 뜨는 것을 브라우저에서 확인. 자동 테스트 5개 추가(37/37 전체 통과).
-- ⬜ Phase 4~6: 아직 시작 전.
+- ✅ **Phase 4 완료** (출하 부족 Risk 판정): 가상데이터 기준 Config 2·4가 정확히 "Waiver Dependent"로(현재양품 800/900, 예상최종양품 800/900, 출하계획 1000/1200, 승인Waiver 200/300, 부족분 200/300), 나머지 7개 Config는 모두 "OK"로 표시됨을 브라우저에서 확인. 예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율(Phase2의 목표수율/자동계산 그대로 재사용)로 계산. 자동 테스트 8개 추가(45/45 전체 통과). 코드 위치: `process-dashboard/lib/shipmentRisk.ts`, 테스트: `process-dashboard/tests/shipmentRisk.test.ts`.
+  - **결정 사항(원본 문서에 명확한 기준이 없어 직접 정함)**: "OK/Risk/Waiver Dependent/Shortage" 4단계 중 "Risk"의 정확한 판정 기준이 원본 문서에 없었음. 부족분이 있는데 승인된 Waiver NG가 0인 경우를 "Risk"(아직 Waiver 신청/승인 전이라 확정 판단 불가, 조사 필요)로, Waiver가 있고 그걸로 충족되면 "Waiver Dependent", 그래도 부족하면 "Shortage"로 정의함. 가상데이터엔 "Risk" 사례가 없어 합성 테스트로만 검증함 — **1:1 코칭에서 확인이 필요한 항목**.
+- ⬜ Phase 5~6: 아직 시작 전.
 
 ## ① 문제 정의 — 지금 무엇이 불편한가
 
@@ -81,6 +83,7 @@ https://github.com/seunguga88-web/Daniel-Kuk.git
 2. **Waiver 미승인 물량을 출하 D-1 초안에 포함시킬지** — 원본 구현안(16장)에서 이미 "확정 필요" 업무 규칙으로 짚었던 항목. MVP 기본값(잠정): Waiver 필요 수량으로만 표시하고 확정 출하 수량엔 미포함.
 3. ~~수율 위험/주의 절대 임계값 고정 여부~~ → 결정됨: 화면에서 조정 가능하게 구현 (Phase 2 완료조건에 반영).
 4. ~~Destination 우선순위 규칙~~ → 결정됨: 화면에서 자유 설정, 기본값 1,2,3,4 (Phase 5에 반영).
+5. **[신규] 출하 부족 Risk 판정의 "Risk" 상태 기준을 임의로 정함** — 원본 문서에 "Risk: 예상 양품이 출하 계획보다 부족할 가능성 있음"이라고만 있고 정확한 수식이 없어서, "부족분은 있는데 승인된 Waiver NG가 아직 0인 경우"로 직접 정의함. 실제 업무에서 맞는 정의인지 확인 필요.
 
 --- 아래는 폼에 넣지 않는 작업 메모 ---
 
