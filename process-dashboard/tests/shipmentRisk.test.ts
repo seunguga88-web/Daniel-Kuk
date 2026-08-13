@@ -31,6 +31,24 @@ describe("computeShipmentRisk on the real virtual data", () => {
     expect(c4.shortfall).toBeCloseTo(300, 0);
   });
 
+  it("atSnapshot lets you view the risk projection at an earlier point in time, not just the latest", () => {
+    const { processStatus, shipmentPlan, shipmentTable } = getDataset();
+    const yieldCells = computeYieldCells(processStatus);
+
+    const latestRows = computeShipmentRisk(processStatus, shipmentPlan, shipmentTable, yieldCells);
+    const earlyRows = computeShipmentRisk(processStatus, shipmentPlan, shipmentTable, yieldCells, {}, {
+      date: "2026-08-12",
+      time: "9:00 A.M",
+    });
+
+    const c2Latest = latestRows.find((r) => r.config === "Config 2")!;
+    const c2Early = earlyRows.find((r) => r.config === "Config 2")!;
+
+    expect(c2Latest.currentGoodQty).toBe(800);
+    expect(c2Early.currentGoodQty).toBe(1160); // Process 11 hadn't finished yet at this snapshot
+    expect(c2Early.currentGoodQty).not.toBe(c2Latest.currentGoodQty);
+  });
+
   it("every other Config is OK", () => {
     const { processStatus, shipmentPlan, shipmentTable } = getDataset();
     const yieldCells = computeYieldCells(processStatus);

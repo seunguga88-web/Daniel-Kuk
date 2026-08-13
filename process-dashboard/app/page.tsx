@@ -19,6 +19,47 @@ import { computeShipmentDraft } from "@/lib/shipmentDraft";
 import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
+function SnapshotPicker({
+  availableDates,
+  effectiveDate,
+  onDateChange,
+  availableTimesForDate,
+  effectiveTime,
+  onTimeChange,
+}: {
+  availableDates: string[];
+  effectiveDate: string | undefined;
+  onDateChange: (v: string) => void;
+  availableTimesForDate: string[];
+  effectiveTime: string | undefined;
+  onTimeChange: (v: string) => void;
+}) {
+  return (
+    <>
+      <label>
+        날짜
+        <select value={effectiveDate ?? ""} onChange={(e) => onDateChange(e.target.value)} style={{ display: "block", marginTop: "0.2rem" }}>
+          {availableDates.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        시간
+        <select value={effectiveTime ?? ""} onChange={(e) => onTimeChange(e.target.value)} style={{ display: "block", marginTop: "0.2rem" }}>
+          {availableTimesForDate.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+}
+
 function downloadWorkbook(buffer: ArrayBuffer, fileName: string) {
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
@@ -202,10 +243,10 @@ export default function Home() {
 
   const shipmentRiskRows = useMemo(
     () =>
-      dataset
-        ? computeShipmentRisk(dataset.processStatus, dataset.shipmentPlan, dataset.shipmentTable, yieldCells, targetYields)
+      dataset && selectedSnapshot
+        ? computeShipmentRisk(dataset.processStatus, dataset.shipmentPlan, dataset.shipmentTable, yieldCells, targetYields, selectedSnapshot)
         : [],
-    [dataset, yieldCells, targetYields]
+    [dataset, yieldCells, targetYields, selectedSnapshot]
   );
 
   const [destinationPriority, setDestinationPriority] = useState<string[]>([
@@ -433,34 +474,14 @@ export default function Home() {
             </p>
 
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
-              <label>
-                날짜
-                <select
-                  value={effectiveDate ?? ""}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  style={{ display: "block", marginTop: "0.2rem" }}
-                >
-                  {availableDates.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                시간
-                <select
-                  value={effectiveTime ?? ""}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  style={{ display: "block", marginTop: "0.2rem" }}
-                >
-                  {availableTimesForDate.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SnapshotPicker
+                availableDates={availableDates}
+                effectiveDate={effectiveDate}
+                onDateChange={setSelectedDate}
+                availableTimesForDate={availableTimesForDate}
+                effectiveTime={effectiveTime}
+                onTimeChange={setSelectedTime}
+              />
               <label>
                 주의(지연일수 이상)
                 <input
@@ -549,6 +570,16 @@ export default function Home() {
             <p style={{ color: "#555" }}>
               예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율. 부족분을 승인된 Waiver NG로 채울 수 있는지에 따라 판정합니다.
             </p>
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
+              <SnapshotPicker
+                availableDates={availableDates}
+                effectiveDate={effectiveDate}
+                onDateChange={setSelectedDate}
+                availableTimesForDate={availableTimesForDate}
+                effectiveTime={effectiveTime}
+                onTimeChange={setSelectedTime}
+              />
+            </div>
             <table style={tableStyle}>
               <thead>
                 <tr>
@@ -579,10 +610,17 @@ export default function Home() {
 
           <section>
             <h2 style={sectionTitle}>Shipment Draft — 출하 D-1 초안</h2>
-            <p style={{ color: "#555" }}>
-              위 Process Dashboard에서 고른 기준 시점(날짜)의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.
-              {selectedSnapshot && ` (기준 시점: ${selectedSnapshot.date} ${selectedSnapshot.time})`}
-            </p>
+            <p style={{ color: "#555" }}>기준 시점의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.</p>
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
+              <SnapshotPicker
+                availableDates={availableDates}
+                effectiveDate={effectiveDate}
+                onDateChange={setSelectedDate}
+                availableTimesForDate={availableTimesForDate}
+                effectiveTime={effectiveTime}
+                onTimeChange={setSelectedTime}
+              />
+            </div>
 
             <h3 style={{ fontSize: "1rem" }}>Destination 우선순위 (화면에서 순서 변경 가능)</h3>
             <ol style={{ paddingLeft: "1.2rem", marginBottom: "1rem" }}>

@@ -1,5 +1,6 @@
 import type { ProcessStatusEntry, ShipmentPlanRecord, ShipmentTableRecord } from "./types";
 import { latestEntryPerConfig, computeBaseline, type YieldCell } from "./yieldAnalysis";
+import type { Snapshot } from "./currentStatus";
 
 export type RiskStatus = "OK" | "Risk" | "Waiver Dependent" | "Shortage";
 
@@ -36,21 +37,33 @@ export function computeExpectedFinalGood(entry: ProcessStatusEntry, yieldCells: 
   return expected;
 }
 
+/** Entries at one specific (date, time) snapshot, one per Config. */
+function entriesAtSnapshot(processStatus: ProcessStatusEntry[], snapshot: Snapshot): Map<string, ProcessStatusEntry> {
+  const m = new Map<string, ProcessStatusEntry>();
+  for (const e of processStatus) {
+    if (e.snapshotDate === snapshot.date && e.snapshotTime === snapshot.time) m.set(e.config, e);
+  }
+  return m;
+}
+
 /**
  * 출하 부족 Risk 판정.
  * - OK: 예상 최종 양품이 출하 계획(Total Shipment) 이상
  * - Risk: 부족하지만 아직 승인된 Waiver NG가 없음 (조사 필요)
  * - Waiver Dependent: 부족하지만 승인된 Waiver NG를 더하면 충족
  * - Shortage: 승인된 Waiver NG를 더해도 부족
+ *
+ * `atSnapshot`을 주면 그 시점 기준으로, 안 주면(기본값) 가장 최신 데이터 기준으로 계산한다.
  */
 export function computeShipmentRisk(
   processStatus: ProcessStatusEntry[],
   shipmentPlan: ShipmentPlanRecord[],
   shipmentTable: ShipmentTableRecord[],
   yieldCells: YieldCell[],
-  targetYields: Record<string, number> = {}
+  targetYields: Record<string, number> = {},
+  atSnapshot?: Snapshot
 ): ShipmentRiskRow[] {
-  const latest = latestEntryPerConfig(processStatus);
+  const latest = atSnapshot ? entriesAtSnapshot(processStatus, atSnapshot) : latestEntryPerConfig(processStatus);
   const totalShipmentByConfig = new Map(shipmentPlan.map((s) => [s.config, s.totalShipment]));
 
   const approvedWaiverByConfig = new Map<string, number>();
