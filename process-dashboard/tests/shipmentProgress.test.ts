@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeShipmentProgress, flattenShipmentProgress } from "../lib/shipmentProgress";
+import { computeShipmentProgress, flattenShipmentProgress, classifyShipmentProgressRow, type ShipmentProgressFlatRow } from "../lib/shipmentProgress";
 import type { ShipmentPlanRecord, ShipmentTableRecord } from "../lib/types";
 
 const plan: ShipmentPlanRecord[] = [
@@ -102,5 +102,53 @@ describe("flattenShipmentProgress", () => {
     expect(dest1Rows).toHaveLength(2);
     expect(dest1Rows[0]).toMatchObject({ date: "2026-08-10", dayQty: 20, cumulativeQty: 20, remainingQty: 40, sampleStatus: "OK" });
     expect(dest1Rows[1]).toMatchObject({ date: "2026-08-12", dayQty: 15, cumulativeQty: 35, remainingQty: 25, sampleStatus: "OK" });
+  });
+
+  it("carries waiverStatus through onto the flat row", () => {
+    const table = [row({ date: "2026-08-10", qty: 20, label: "Waiver NG", waiverStatus: "Pending" })];
+    const rows = computeShipmentProgress(plan, table, "2026-08-15");
+    const flat = flattenShipmentProgress(rows);
+    expect(flat[0]).toMatchObject({ sampleStatus: "Waiver NG", waiverStatus: "Pending" });
+  });
+});
+
+function flatRow(overrides: Partial<ShipmentProgressFlatRow>): ShipmentProgressFlatRow {
+  return {
+    config: "Config 1",
+    destination: "Destination 1",
+    planQty: 60,
+    date: "2026-08-10",
+    dayQty: 20,
+    cumulativeQty: 20,
+    remainingQty: 40,
+    sampleStatus: "OK",
+    waiverStatus: "N/A",
+    ...overrides,
+  };
+}
+
+describe("classifyShipmentProgressRow", () => {
+  it("flags negative remaining qty (over-shipped) as a problem", () => {
+    expect(classifyShipmentProgressRow(flatRow({ remainingQty: -10 }))).toBe("problem");
+  });
+
+  it("flags an unapproved Waiver NG shipment as a problem", () => {
+    expect(classifyShipmentProgressRow(flatRow({ sampleStatus: "Waiver NG", waiverStatus: "Pending" }))).toBe("problem");
+  });
+
+  it("treats an approved Waiver NG shipment as not a problem", () => {
+    expect(classifyShipmentProgressRow(flatRow({ sampleStatus: "Waiver NG", waiverStatus: "Approved", remainingQty: 0 }))).toBe("complete");
+  });
+
+  it("marks a fully-shipped row (remaining 0) as complete", () => {
+    expect(classifyShipmentProgressRow(flatRow({ remainingQty: 0 }))).toBe("complete");
+  });
+
+  it("prioritizes problem over complete when both conditions hold", () => {
+    expect(classifyShipmentProgressRow(flatRow({ remainingQty: 0, sampleStatus: "Waiver NG", waiverStatus: "Pending" }))).toBe("problem");
+  });
+
+  it("treats a still-in-progress row (remaining > 0, no waiver issue) as normal", () => {
+    expect(classifyShipmentProgressRow(flatRow({ remainingQty: 40 }))).toBe("normal");
   });
 });

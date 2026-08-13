@@ -75,6 +75,7 @@ export interface ShipmentProgressFlatRow {
   cumulativeQty: number;
   remainingQty: number;
   sampleStatus: string | null;
+  waiverStatus: string | null;
 }
 
 /** Config x Destination x 날짜별 출하 기록을 한 줄씩 펼친다(엑셀 필터 표처럼 화면에 한 표로 보여주기 위함). */
@@ -92,6 +93,7 @@ export function flattenShipmentProgress(rows: ShipmentProgressConfigRow[]): Ship
           cumulativeQty: 0,
           remainingQty: d.remainingQty,
           sampleStatus: null,
+          waiverStatus: null,
         });
         continue;
       }
@@ -105,9 +107,26 @@ export function flattenShipmentProgress(rows: ShipmentProgressConfigRow[]): Ship
           cumulativeQty: e.cumulativeQty,
           remainingQty: d.planQty - e.cumulativeQty,
           sampleStatus: e.label,
+          waiverStatus: e.waiverStatus,
         });
       }
     }
   }
   return flat;
+}
+
+export type ShipmentProgressRowStatus = "complete" | "problem" | "normal";
+
+/**
+ * 화면에서 강조 표시할 행 상태를 판정한다.
+ * - problem: 계획보다 더 많이 나간 초과 출하(잔여 수량 음수), 또는 승인되지 않은 Waiver NG 출하
+ * - complete: 잔여 수량이 0 (계획 수량을 채움)
+ * - normal: 그 외 (아직 출하 전이거나 진행 중)
+ * problem 조건이 complete보다 우선한다 — 수량은 채워졌어도 미승인 Waiver가 있으면 여전히 확인이 필요하기 때문.
+ */
+export function classifyShipmentProgressRow(row: ShipmentProgressFlatRow): ShipmentProgressRowStatus {
+  if (row.remainingQty < 0) return "problem";
+  if (row.sampleStatus === "Waiver NG" && row.waiverStatus !== "Approved") return "problem";
+  if (row.remainingQty === 0) return "complete";
+  return "normal";
 }

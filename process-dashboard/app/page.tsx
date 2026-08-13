@@ -23,7 +23,13 @@ import {
   buildShipmentDraftWorkbook,
 } from "@/lib/exportExcel";
 import { loadUpload, saveUpload } from "@/lib/persistence";
-import { computeShipmentProgress, flattenShipmentProgress, type ShipmentProgressFlatRow } from "@/lib/shipmentProgress";
+import {
+  computeShipmentProgress,
+  flattenShipmentProgress,
+  classifyShipmentProgressRow,
+  type ShipmentProgressFlatRow,
+  type ShipmentProgressRowStatus,
+} from "@/lib/shipmentProgress";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 function SnapshotPicker({
@@ -168,6 +174,18 @@ function FilterableColumnHeader({
   );
 }
 
+const PROGRESS_STATUS_LABEL: Record<ShipmentProgressRowStatus, string> = {
+  complete: "완료",
+  problem: "확인 필요",
+  normal: "진행 중",
+};
+
+const PROGRESS_STATUS_COLOR: Record<ShipmentProgressRowStatus, string> = {
+  complete: "rgba(34, 197, 94, 0.16)",
+  problem: "rgba(239, 68, 68, 0.18)",
+  normal: "transparent",
+};
+
 const PROGRESS_COLUMNS: FilterColumn<ShipmentProgressFlatRow>[] = [
   { key: "config", label: "Config", getValue: (r) => r.config },
   { key: "destination", label: "Destination", getValue: (r) => r.destination },
@@ -177,6 +195,8 @@ const PROGRESS_COLUMNS: FilterColumn<ShipmentProgressFlatRow>[] = [
   { key: "cumulativeQty", label: "누적 출하", getValue: (r) => String(r.cumulativeQty) },
   { key: "remainingQty", label: "잔여 수량", getValue: (r) => String(r.remainingQty) },
   { key: "sampleStatus", label: "Sample Status", getValue: (r) => r.sampleStatus ?? "-" },
+  { key: "waiverStatus", label: "Waiver Status", getValue: (r) => r.waiverStatus ?? "-" },
+  { key: "status", label: "상태", getValue: (r) => PROGRESS_STATUS_LABEL[classifyShipmentProgressRow(r)] },
 ];
 
 function downloadWorkbook(buffer: ArrayBuffer, fileName: string) {
@@ -885,7 +905,8 @@ export default function Home() {
             <h2 style={sectionTitle}>Shipment Progress — 출하 계획 대비 진행률</h2>
             <p style={{ color: "var(--muted)" }}>
               Config·Destination별로 출하 계획 수량과, 기준 시점까지 Config 출하 테이블에 실제로 기록된 출하 완료 수량을 비교해 남은 필요 수량을
-              보여줍니다.
+              보여줍니다. <span className="status-pill status-pill-complete">완료</span>는 계획 수량을 다 채운 행,{" "}
+              <span className="status-pill status-pill-problem">확인 필요</span>는 계획보다 초과 출하됐거나 승인되지 않은 Waiver NG가 섞인 행입니다.
             </p>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
               <SnapshotPicker
@@ -926,18 +947,28 @@ export default function Home() {
                         </td>
                       </tr>
                     ) : (
-                      progressFilters.filteredRows.map((r, i) => (
-                        <tr key={`${r.config}-${r.destination}-${r.date ?? "none"}-${i}`}>
-                          <td style={cellStyle}>{r.config}</td>
-                          <td style={cellStyle}>{r.destination}</td>
-                          <td style={cellStyle}>{r.planQty}</td>
-                          <td style={cellStyle}>{r.date ?? "-"}</td>
-                          <td style={cellStyle}>{r.dayQty ?? "-"}</td>
-                          <td style={cellStyle}>{r.cumulativeQty}</td>
-                          <td style={cellStyle}>{r.remainingQty}</td>
-                          <td style={cellStyle}>{r.sampleStatus ?? "-"}</td>
-                        </tr>
-                      ))
+                      progressFilters.filteredRows.map((r, i) => {
+                        const status = classifyShipmentProgressRow(r);
+                        return (
+                          <tr
+                            key={`${r.config}-${r.destination}-${r.date ?? "none"}-${i}`}
+                            style={{ background: PROGRESS_STATUS_COLOR[status] }}
+                          >
+                            <td style={cellStyle}>{r.config}</td>
+                            <td style={cellStyle}>{r.destination}</td>
+                            <td style={cellStyle}>{r.planQty}</td>
+                            <td style={cellStyle}>{r.date ?? "-"}</td>
+                            <td style={cellStyle}>{r.dayQty ?? "-"}</td>
+                            <td style={cellStyle}>{r.cumulativeQty}</td>
+                            <td style={cellStyle}>{r.remainingQty}</td>
+                            <td style={cellStyle}>{r.sampleStatus ?? "-"}</td>
+                            <td style={cellStyle}>{r.waiverStatus ?? "-"}</td>
+                            <td style={cellStyle}>
+                              <span className={`status-pill status-pill-${status}`}>{PROGRESS_STATUS_LABEL[status]}</span>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

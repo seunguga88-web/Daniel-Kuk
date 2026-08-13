@@ -394,3 +394,28 @@ tbody tr:hover td {
 .col-filter-menu input[type="checkbox"] {
   margin: 0;
 }
+
+/* ---------- Status pills (Shipment Progress) ---------- */
+
+.status-pill {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.status-pill-complete {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--success);
+}
+
+.status-pill-problem {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--danger);
+}
+
+.status-pill-normal {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
