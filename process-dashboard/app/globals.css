@@ -312,3 +312,85 @@ tbody tr:last-child td {
 tbody tr:hover td {
   background-color: color-mix(in srgb, var(--accent-soft) 55%, transparent);
 }
+
+/* ---------- Excel-style column filters ---------- */
+
+.col-filter {
+  position: relative;
+}
+
+.col-filter summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.col-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.col-filter-badge {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.col-filter-badge.active {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.col-filter-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: 0.5rem;
+  min-width: 11rem;
+  max-height: 16rem;
+  display: flex;
+  flex-direction: column;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.col-filter-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.col-filter-actions button {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.col-filter-menu ul {
+  list-style: none;
+  overflow-y: auto;
+}
+
+.col-filter-menu li {
+  padding: 0.15rem 0;
+}
+
+.col-filter-menu label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--foreground);
+  text-transform: none;
+  cursor: pointer;
+}
+
+.col-filter-menu input[type="checkbox"] {
+  margin: 0;
+}

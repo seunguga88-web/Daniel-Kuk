@@ -65,3 +65,49 @@ export function computeShipmentProgress(
     })
     .sort((a, b) => a.config.localeCompare(b.config));
 }
+
+export interface ShipmentProgressFlatRow {
+  config: string;
+  destination: string;
+  planQty: number;
+  date: string | null;
+  dayQty: number | null;
+  cumulativeQty: number;
+  remainingQty: number;
+  sampleStatus: string | null;
+}
+
+/** Config x Destination x 날짜별 출하 기록을 한 줄씩 펼친다(엑셀 필터 표처럼 화면에 한 표로 보여주기 위함). */
+export function flattenShipmentProgress(rows: ShipmentProgressConfigRow[]): ShipmentProgressFlatRow[] {
+  const flat: ShipmentProgressFlatRow[] = [];
+  for (const c of rows) {
+    for (const d of c.destinations) {
+      if (d.entries.length === 0) {
+        flat.push({
+          config: c.config,
+          destination: d.destination,
+          planQty: d.planQty,
+          date: null,
+          dayQty: null,
+          cumulativeQty: 0,
+          remainingQty: d.remainingQty,
+          sampleStatus: null,
+        });
+        continue;
+      }
+      for (const e of d.entries) {
+        flat.push({
+          config: c.config,
+          destination: d.destination,
+          planQty: d.planQty,
+          date: e.date,
+          dayQty: e.qty,
+          cumulativeQty: e.cumulativeQty,
+          remainingQty: d.planQty - e.cumulativeQty,
+          sampleStatus: e.label,
+        });
+      }
+    }
+  }
+  return flat;
+}

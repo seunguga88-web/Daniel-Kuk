@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeShipmentProgress } from "../lib/shipmentProgress";
+import { computeShipmentProgress, flattenShipmentProgress } from "../lib/shipmentProgress";
 import type { ShipmentPlanRecord, ShipmentTableRecord } from "../lib/types";
 
 const plan: ShipmentPlanRecord[] = [
@@ -74,5 +74,33 @@ describe("computeShipmentProgress", () => {
     ];
     const result = computeShipmentProgress(twoConfigs, [], "2026-08-15");
     expect(result.map((c) => c.config)).toEqual(["Config 1", "Config 2"]);
+  });
+});
+
+describe("flattenShipmentProgress", () => {
+  it("emits one placeholder row per destination with no shipments yet", () => {
+    const rows = computeShipmentProgress(plan, [], "2026-08-10");
+    const flat = flattenShipmentProgress(rows);
+    expect(flat).toHaveLength(2);
+    expect(flat[0]).toMatchObject({
+      config: "Config 1",
+      destination: "Destination 1",
+      planQty: 60,
+      date: null,
+      dayQty: null,
+      cumulativeQty: 0,
+      remainingQty: 60,
+      sampleStatus: null,
+    });
+  });
+
+  it("emits one row per date entry, carrying the plan qty and per-row remaining qty", () => {
+    const table = [row({ date: "2026-08-10", qty: 20 }), row({ date: "2026-08-12", qty: 15 })];
+    const rows = computeShipmentProgress(plan, table, "2026-08-15");
+    const flat = flattenShipmentProgress(rows);
+    const dest1Rows = flat.filter((r) => r.destination === "Destination 1");
+    expect(dest1Rows).toHaveLength(2);
+    expect(dest1Rows[0]).toMatchObject({ date: "2026-08-10", dayQty: 20, cumulativeQty: 20, remainingQty: 40, sampleStatus: "OK" });
+    expect(dest1Rows[1]).toMatchObject({ date: "2026-08-12", dayQty: 15, cumulativeQty: 35, remainingQty: 25, sampleStatus: "OK" });
   });
 });

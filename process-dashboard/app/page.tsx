@@ -23,7 +23,7 @@ import {
   buildShipmentDraftWorkbook,
 } from "@/lib/exportExcel";
 import { loadUpload, saveUpload } from "@/lib/persistence";
-import { computeShipmentProgress } from "@/lib/shipmentProgress";
+import { computeShipmentProgress, flattenShipmentProgress, type ShipmentProgressFlatRow } from "@/lib/shipmentProgress";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 function SnapshotPicker({
@@ -66,6 +66,118 @@ function SnapshotPicker({
     </>
   );
 }
+
+interface FilterColumn<T> {
+  key: string;
+  label: string;
+  getValue: (row: T) => string;
+}
+
+/** 엑셀 자동 필터처럼, 컬럼별로 표시된 값 중 일부만 골라 표에서 보이게 한다. 값을 지정 안 한 컬럼은 "전체 선택" 상태로 취급한다. */
+function useColumnFilters<T>(rows: T[], columns: FilterColumn<T>[]) {
+  const [filters, setFilters] = useState<Record<string, Set<string>>>({});
+
+  const optionsByColumn = useMemo(() => {
+    const m: Record<string, string[]> = {};
+    for (const col of columns) {
+      m[col.key] = Array.from(new Set(rows.map(col.getValue))).sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
+    }
+    return m;
+  }, [rows, columns]);
+
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        columns.every((col) => {
+          const active = filters[col.key];
+          return !active || active.has(col.getValue(row));
+        })
+      ),
+    [rows, columns, filters]
+  );
+
+  function toggleValue(key: string, value: string) {
+    setFilters((prev) => {
+      const current = prev[key] ?? new Set(optionsByColumn[key]);
+      const next = new Set(current);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return { ...prev, [key]: next };
+    });
+  }
+
+  function selectAll(key: string) {
+    setFilters((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function selectNone(key: string) {
+    setFilters((prev) => ({ ...prev, [key]: new Set() }));
+  }
+
+  return { filteredRows, optionsByColumn, filters, toggleValue, selectAll, selectNone };
+}
+
+function FilterableColumnHeader({
+  label,
+  options,
+  selected,
+  onToggle,
+  onSelectAll,
+  onSelectNone,
+}: {
+  label: string;
+  options: string[];
+  selected: Set<string> | undefined;
+  onToggle: (value: string) => void;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+}) {
+  const isFiltered = selected !== undefined && selected.size < options.length;
+  return (
+    <th style={cellStyle}>
+      <details className="col-filter">
+        <summary>
+          {label} <span className={isFiltered ? "col-filter-badge active" : "col-filter-badge"}>▾</span>
+        </summary>
+        <div className="col-filter-menu">
+          <div className="col-filter-actions">
+            <button type="button" onClick={onSelectAll}>
+              전체 선택
+            </button>
+            <button type="button" onClick={onSelectNone}>
+              전체 해제
+            </button>
+          </div>
+          <ul>
+            {options.map((opt) => (
+              <li key={opt}>
+                <label>
+                  <input type="checkbox" checked={selected ? selected.has(opt) : true} onChange={() => onToggle(opt)} />
+                  {opt}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+    </th>
+  );
+}
+
+const PROGRESS_COLUMNS: FilterColumn<ShipmentProgressFlatRow>[] = [
+  { key: "config", label: "Config", getValue: (r) => r.config },
+  { key: "destination", label: "Destination", getValue: (r) => r.destination },
+  { key: "planQty", label: "계획 수량", getValue: (r) => String(r.planQty) },
+  { key: "date", label: "날짜", getValue: (r) => r.date ?? "-" },
+  { key: "dayQty", label: "해당일 출하 수량", getValue: (r) => (r.dayQty === null ? "-" : String(r.dayQty)) },
+  { key: "cumulativeQty", label: "누적 출하", getValue: (r) => String(r.cumulativeQty) },
+  { key: "remainingQty", label: "잔여 수량", getValue: (r) => String(r.remainingQty) },
+  { key: "sampleStatus", label: "Sample Status", getValue: (r) => r.sampleStatus ?? "-" },
+];
 
 function downloadWorkbook(buffer: ArrayBuffer, fileName: string) {
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -322,6 +434,8 @@ export default function Home() {
     () => (dataset && effectiveDate ? computeShipmentProgress(dataset.shipmentPlan, dataset.shipmentTable, effectiveDate) : []),
     [dataset, effectiveDate]
   );
+  const progressFlatRows = useMemo(() => flattenShipmentProgress(shipmentProgressRows), [shipmentProgressRows]);
+  const progressFilters = useColumnFilters(progressFlatRows, PROGRESS_COLUMNS);
 
   async function handleDownloadYieldExcel() {
     try {
@@ -784,56 +898,50 @@ export default function Home() {
               />
             </div>
 
-            {shipmentProgressRows.length === 0 ? (
+            {progressFlatRows.length === 0 ? (
               <p style={{ color: "var(--muted)" }}>출하 계획 데이터가 없습니다.</p>
             ) : (
-              shipmentProgressRows.map((row) => (
-                <div key={row.config} style={{ marginBottom: "1.5rem" }}>
-                  <h3 style={{ fontSize: "1rem" }}>
-                    {row.config} — 계획 {row.totalPlanQty} / 출하 완료 {row.totalShippedQty} / 잔여 {row.totalRemainingQty}
-                  </h3>
-                  <table style={tableStyle}>
-                    <thead>
+              <div style={{ overflowX: "auto" }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      {PROGRESS_COLUMNS.map((col) => (
+                        <FilterableColumnHeader
+                          key={col.key}
+                          label={col.label}
+                          options={progressFilters.optionsByColumn[col.key] ?? []}
+                          selected={progressFilters.filters[col.key]}
+                          onToggle={(v) => progressFilters.toggleValue(col.key, v)}
+                          onSelectAll={() => progressFilters.selectAll(col.key)}
+                          onSelectNone={() => progressFilters.selectNone(col.key)}
+                        />
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {progressFilters.filteredRows.length === 0 ? (
                       <tr>
-                        <th style={cellStyle}>Destination</th>
-                        <th style={cellStyle}>계획 수량</th>
-                        <th style={cellStyle}>날짜</th>
-                        <th style={cellStyle}>해당일 출하 수량</th>
-                        <th style={cellStyle}>누적 출하</th>
-                        <th style={cellStyle}>잔여 수량</th>
-                        <th style={cellStyle}>Sample Status</th>
+                        <td style={cellStyle} colSpan={PROGRESS_COLUMNS.length}>
+                          필터 조건에 맞는 행이 없습니다.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {row.destinations.map((d) =>
-                        d.entries.length === 0 ? (
-                          <tr key={d.destination}>
-                            <td style={cellStyle}>{d.destination}</td>
-                            <td style={cellStyle}>{d.planQty}</td>
-                            <td style={cellStyle}>-</td>
-                            <td style={cellStyle}>-</td>
-                            <td style={cellStyle}>0</td>
-                            <td style={cellStyle}>{d.remainingQty}</td>
-                            <td style={cellStyle}>-</td>
-                          </tr>
-                        ) : (
-                          d.entries.map((e, i) => (
-                            <tr key={`${d.destination}-${e.date}-${i}`}>
-                              <td style={cellStyle}>{d.destination}</td>
-                              <td style={cellStyle}>{d.planQty}</td>
-                              <td style={cellStyle}>{e.date}</td>
-                              <td style={cellStyle}>{e.qty}</td>
-                              <td style={cellStyle}>{e.cumulativeQty}</td>
-                              <td style={cellStyle}>{d.planQty - e.cumulativeQty}</td>
-                              <td style={cellStyle}>{e.label}</td>
-                            </tr>
-                          ))
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ))
+                    ) : (
+                      progressFilters.filteredRows.map((r, i) => (
+                        <tr key={`${r.config}-${r.destination}-${r.date ?? "none"}-${i}`}>
+                          <td style={cellStyle}>{r.config}</td>
+                          <td style={cellStyle}>{r.destination}</td>
+                          <td style={cellStyle}>{r.planQty}</td>
+                          <td style={cellStyle}>{r.date ?? "-"}</td>
+                          <td style={cellStyle}>{r.dayQty ?? "-"}</td>
+                          <td style={cellStyle}>{r.cumulativeQty}</td>
+                          <td style={cellStyle}>{r.remainingQty}</td>
+                          <td style={cellStyle}>{r.sampleStatus ?? "-"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
           )}
