@@ -22,8 +22,8 @@ import {
   buildShipmentRiskWorkbook,
   buildShipmentDraftWorkbook,
 } from "@/lib/exportExcel";
-import { loadUpload, recordUpload, loadShipmentHistory } from "@/lib/persistence";
-import type { ShipmentHistoryEntry } from "@/lib/shipmentHistory";
+import { loadUpload, saveUpload } from "@/lib/persistence";
+import { computeShipmentProgress } from "@/lib/shipmentProgress";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 function SnapshotPicker({
@@ -110,20 +110,6 @@ const STATUS_LABEL: Record<YieldStatus, string> = {
   normal: "정상",
 };
 
-const CHANGE_TYPE_LABEL: Record<ShipmentHistoryEntry["changeType"], string> = {
-  added: "신규",
-  modified: "수정",
-  removed: "삭제",
-};
-
-const FIELD_LABEL: Record<string, string> = {
-  date: "Date",
-  qty: "Qty",
-  label: "Label",
-  waiverStatus: "Waiver Status",
-  cause: "Cause",
-};
-
 function processNum(name: string): number {
   const m = name.match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 0;
@@ -135,7 +121,7 @@ const TABS = [
   { id: "process", label: "Process Dashboard" },
   { id: "risk", label: "Shipment Risk" },
   { id: "draft", label: "Shipment Draft" },
-  { id: "history", label: "Shipment History" },
+  { id: "progress", label: "Shipment Progress" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -144,7 +130,6 @@ export default function Home() {
   const [unrecognizedFiles, setUnrecognizedFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [shipmentHistory, setShipmentHistory] = useState<ShipmentHistoryEntry[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("upload");
 
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
@@ -164,7 +149,6 @@ export default function Home() {
       setUnrecognizedFiles(stored.unrecognizedFiles);
       setLastSavedAt(stored.savedAt);
     }
-    setShipmentHistory(loadShipmentHistory());
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -181,9 +165,8 @@ export default function Home() {
       const parsed = parseAllFiles(inputs);
       setDataset(parsed.dataset);
       setUnrecognizedFiles(parsed.unrecognizedFiles);
-      recordUpload(parsed.dataset, parsed.unrecognizedFiles);
+      saveUpload(parsed.dataset, parsed.unrecognizedFiles);
       setLastSavedAt(new Date().toISOString());
-      setShipmentHistory(loadShipmentHistory());
     } finally {
       setLoading(false);
     }
@@ -333,6 +316,11 @@ export default function Home() {
           )
         : [],
     [dataset, selectedSnapshot, yieldCells, targetYields, destinationPriority]
+  );
+
+  const shipmentProgressRows = useMemo(
+    () => (dataset && effectiveDate ? computeShipmentProgress(dataset.shipmentPlan, dataset.shipmentTable, effectiveDate) : []),
+    [dataset, effectiveDate]
   );
 
   async function handleDownloadYieldExcel() {
@@ -778,46 +766,74 @@ export default function Home() {
           </section>
           )}
 
-          {activeTab === "history" && (
-          <section id="history">
-            <h2 style={sectionTitle}>Shipment History — 출하 수정 이력</h2>
+          {activeTab === "progress" && (
+          <section id="progress">
+            <h2 style={sectionTitle}>Shipment Progress — 출하 계획 대비 진행률</h2>
             <p style={{ color: "var(--muted)" }}>
-              Config 출하 테이블을 다시 업로드할 때마다 이전 업로드와 비교해 바뀐 내용을 여기 누적 기록합니다(덮어쓰지 않음). Config·Destination·Label
-              조합으로 행을 식별합니다(원본 데이터에 별도 Row ID가 없어 대체).
+              Config·Destination별로 출하 계획 수량과, 기준 시점까지 Config 출하 테이블에 실제로 기록된 출하 완료 수량을 비교해 남은 필요 수량을
+              보여줍니다.
             </p>
-            {shipmentHistory.length === 0 ? (
-              <p style={{ color: "var(--muted)" }}>아직 기록된 변경 이력이 없습니다. Config 출하 테이블을 수정해서 다시 업로드하면 여기 쌓입니다.</p>
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
+              <SnapshotPicker
+                availableDates={availableDates}
+                effectiveDate={effectiveDate}
+                onDateChange={setSelectedDate}
+                availableTimesForDate={availableTimesForDate}
+                effectiveTime={effectiveTime}
+                onTimeChange={setSelectedTime}
+              />
+            </div>
+
+            {shipmentProgressRows.length === 0 ? (
+              <p style={{ color: "var(--muted)" }}>출하 계획 데이터가 없습니다.</p>
             ) : (
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={cellStyle}>변경 시각</th>
-                    <th style={cellStyle}>업로드 버전</th>
-                    <th style={cellStyle}>Config</th>
-                    <th style={cellStyle}>Destination</th>
-                    <th style={cellStyle}>구분</th>
-                    <th style={cellStyle}>변경 항목</th>
-                    <th style={cellStyle}>변경 전</th>
-                    <th style={cellStyle}>변경 후</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...shipmentHistory]
-                    .sort((a, b) => (a.changedAt < b.changedAt ? 1 : -1))
-                    .map((e, i) => (
-                      <tr key={i}>
-                        <td style={cellStyle}>{new Date(e.changedAt).toLocaleString("ko-KR")}</td>
-                        <td style={cellStyle}>{e.uploadVersion}</td>
-                        <td style={cellStyle}>{e.config}</td>
-                        <td style={cellStyle}>{e.destination}</td>
-                        <td style={cellStyle}>{CHANGE_TYPE_LABEL[e.changeType]}</td>
-                        <td style={cellStyle}>{e.field ? (FIELD_LABEL[e.field] ?? e.field) : ""}</td>
-                        <td style={cellStyle}>{e.oldValue ?? ""}</td>
-                        <td style={cellStyle}>{e.newValue ?? ""}</td>
+              shipmentProgressRows.map((row) => (
+                <div key={row.config} style={{ marginBottom: "1.5rem" }}>
+                  <h3 style={{ fontSize: "1rem" }}>
+                    {row.config} — 계획 {row.totalPlanQty} / 출하 완료 {row.totalShippedQty} / 잔여 {row.totalRemainingQty}
+                  </h3>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={cellStyle}>Destination</th>
+                        <th style={cellStyle}>계획 수량</th>
+                        <th style={cellStyle}>날짜</th>
+                        <th style={cellStyle}>해당일 출하 수량</th>
+                        <th style={cellStyle}>누적 출하</th>
+                        <th style={cellStyle}>잔여 수량</th>
+                        <th style={cellStyle}>Sample Status</th>
                       </tr>
-                    ))}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {row.destinations.map((d) =>
+                        d.entries.length === 0 ? (
+                          <tr key={d.destination}>
+                            <td style={cellStyle}>{d.destination}</td>
+                            <td style={cellStyle}>{d.planQty}</td>
+                            <td style={cellStyle}>-</td>
+                            <td style={cellStyle}>-</td>
+                            <td style={cellStyle}>0</td>
+                            <td style={cellStyle}>{d.remainingQty}</td>
+                            <td style={cellStyle}>-</td>
+                          </tr>
+                        ) : (
+                          d.entries.map((e, i) => (
+                            <tr key={`${d.destination}-${e.date}-${i}`}>
+                              <td style={cellStyle}>{d.destination}</td>
+                              <td style={cellStyle}>{d.planQty}</td>
+                              <td style={cellStyle}>{e.date}</td>
+                              <td style={cellStyle}>{e.qty}</td>
+                              <td style={cellStyle}>{e.cumulativeQty}</td>
+                              <td style={cellStyle}>{d.planQty - e.cumulativeQty}</td>
+                              <td style={cellStyle}>{e.label}</td>
+                            </tr>
+                          ))
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ))
             )}
           </section>
           )}
