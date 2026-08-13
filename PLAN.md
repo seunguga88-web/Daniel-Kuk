@@ -22,7 +22,7 @@
 ## ③ 범위 — 반드시 / 되면 좋은 / 안 하는 것
 
 - **반드시 (이게 안 되면 실패)**:
-  1. 5개 Excel 업로드 + 정합성 자동검증 (Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG 등)
+  1. 5개 Excel 업로드 + 정합성 자동검증 (Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG 등), 컬럼은 위치가 아니라 헤더 이름으로 매핑
   2. Process별 수율 이상점 자동탐지 (기준 수율 대비 위험/주의/정상, 화면에서 Process별 목표 수율 입력 가능 — 입력 시 그 값을 기준 수율로 사용, 미입력 Process는 자동계산 값 사용, 0~100% 범위를 벗어나거나 숫자가 아닌 입력은 거부하고 오류 표시)
   3. Daily Plan 대비 Config·Process별 일정편차 표시 (지연/선행/진행중/계획준수) + 지연일수 2일 이상이면 주의, 3일 이상이면 위험으로 알람 표시
   4. 출하 부족 Risk 판정 (OK/Risk/Waiver Dependent/Shortage)
@@ -40,7 +40,7 @@
 
 ## ④ Phase 분할과 각 Phase 완료 기준
 
-1. Excel Parser + 정합성 검증 — 완료: 5개 파일 업로드 시 헤더 기준으로 파일 종류가 자동 판별되고, 정합성 위반 케이스(예: Input≠Output+NG)를 넣으면 오류 위치가 화면에 표시된다. 완료 후 사용자 승인을 받고 Phase 2로 진행한다.
+1. Excel Parser + 정합성 검증 — 완료: 5개 파일 업로드 시 헤더 기준으로 파일 종류가 자동 판별되고, 정합성 위반 케이스(예: Input≠Output+NG)를 넣으면 오류 위치가 화면에 표시된다. 컬럼은 위치(몇 번째 열)가 아니라 헤더 이름으로 찾아 매핑한다 — 가상데이터 파일의 열 순서를 바꾼 테스트 케이스를 넣어도 정상 파싱되는지로 확인한다(향후 실데이터의 헤더 배치·구성이 달라져도 깨지지 않게 하기 위함). 완료 후 사용자 승인을 받고 Phase 2로 진행한다.
 2. 수율 이상점 탐지 + 목표 수율 입력 — 완료: 가상데이터 기준 Config 2·4의 Process 7·11이 수율 이상점(위험/주의)으로 자동 표시된다. 화면에서 Process별 목표 수율을 입력하면 그 값이 기준 수율로 쓰여 이상점 판정 결과가 바뀐다 (미입력 Process는 기존처럼 여러 Config의 중간값을 자동계산해서 기준 수율로 사용). 입력값이 0~100% 범위를 벗어나거나(예: 음수, 100% 초과) 숫자가 아니면 저장을 거부하고 화면에 오류를 표시한다. 완료 후 사용자 승인을 받고 Phase 3으로 진행한다.
 3. 일정편차 + 지연 알람 — 완료: Config·Process별 일정편차(지연/선행/진행중/준수)가 표에 나타난다. Daily Plan 날짜는 "완료 목표일"로 해석한다(해당 날짜 안에 Output 완료 필요). 이 지연일수(=실제 Output 최초 발생일 - Daily Plan 계획일)가 2일 이상이면 주의, 3일 이상이면 위험으로 같은 표에 알람 표시한다. 완료 후 사용자가 지연일수 계산이 정확한지 확인하고 승인한 뒤 Phase 4로 진행한다.
 4. 출하 부족 Risk 판정 — 완료: 가상데이터 기준 Config 2·4가 Waiver Dependent로, 다른 정상 Config는 OK로 정확히 표시된다. 완료 후 사용자 승인을 받고 Phase 5로 진행한다.
@@ -49,7 +49,7 @@
 
 ## ⑤ 완료를 판정할 방법 (검증 게이트)
 
-- **기계가 판정하는 것**: 정합성 검증 규칙 6종(Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG, 이전 Output=다음 Input 등), Config 2·4 이상점/Risk 자동판정 결과가 가상데이터 기준값과 일치하는지, 지연일수(Daily Plan 대비)가 2일/3일 임계값대로 주의/위험 알람으로 표시되는지, Destination 우선순위를 기본값(1,2,3,4)으로 뒀을 때 Config 2·4 배정 결과가 맞는지 그리고 우선순위를 바꾸면 D-1 초안 표의 배정 값이 실제로 바뀌는지, Process별 목표 수율을 입력하면 이상점 판정 결과가 그 값 기준으로 바뀌는지, 0~100% 범위 밖 값이나 숫자가 아닌 값을 입력하면 저장이 거부되고 오류가 표시되는지 자동 테스트로 확인.
+- **기계가 판정하는 것**: 열 순서를 바꾼 테스트 파일도 헤더 이름 매핑으로 정상 파싱되는지, 정합성 검증 규칙 6종(Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG, 이전 Output=다음 Input 등), Config 2·4 이상점/Risk 자동판정 결과가 가상데이터 기준값과 일치하는지, 지연일수(Daily Plan 대비)가 2일/3일 임계값대로 주의/위험 알람으로 표시되는지, Destination 우선순위를 기본값(1,2,3,4)으로 뒀을 때 Config 2·4 배정 결과가 맞는지 그리고 우선순위를 바꾸면 D-1 초안 표의 배정 값이 실제로 바뀌는지, Process별 목표 수율을 입력하면 이상점 판정 결과가 그 값 기준으로 바뀌는지, 0~100% 범위 밖 값이나 숫자가 아닌 값을 입력하면 저장이 거부되고 오류가 표시되는지 자동 테스트로 확인.
 - **사람이 눈으로 보는 것**: 대시보드 화면의 표·색상 표시가 실제로 읽기 쉬운지, 출하 D-1 초안 표의 배정 결과가 상식적으로 맞는지.
 - **내가 직접 승인할 지점**: Phase 1(Parser) 완료 후 실제 진행 여부, Phase 2(수율 이상점) 결과가 Config 2·4 사례와 맞는지 확인한 뒤 Phase 3 진행, Phase 3(일정편차+지연 알람) 지연일수 계산이 정확한지 확인한 뒤 Phase 4 진행, Phase 4(Risk 판정) 결과가 문서 예시(Config 2·4 Waiver Dependent)와 일치하는지 확인한 뒤 Phase 5 진행, Phase 5(D-1 초안) 배정 결과가 Config 2·4 가상데이터 기준으로 맞는지 확인한 뒤 Phase 6 진행.
 
