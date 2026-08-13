@@ -80,7 +80,7 @@ describe("buildYieldAnalysisWorkbook — cell-by-cell round trip", () => {
 describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
   it("writes one row per Config with the snapshot header and per-cell delay info", async () => {
     const dataset = getDataset();
-    const snapshot = { date: "2026-08-13", time: "9:00 A.M" };
+    const snapshot = { date: "2026-08-14", time: "9:00 A.M" };
     const rows = computeCurrentStatus(dataset.dailyPlan, dataset.processStatus, snapshot, DEFAULT_SCHEDULE_THRESHOLDS);
 
     const buffer = await buildProcessDashboardWorkbook(rows, snapshot, DEFAULT_SCHEDULE_THRESHOLDS);
@@ -88,7 +88,7 @@ describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
     const sheet = wb.getWorksheet("Process Dashboard")!;
 
     expect(sheet.getCell("A1").value).toBe("기준 시점");
-    expect(sheet.getCell("B1").value).toBe("2026-08-13 9:00 A.M");
+    expect(sheet.getCell("B1").value).toBe("2026-08-14 9:00 A.M");
 
     // Find Config 3's row and check each column individually.
     let config3Row = -1;
@@ -103,7 +103,7 @@ describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
     expect(sheet.getCell(config3Row, 3).value).toBe("Green"); // on-time -> green traffic light
     expect(sheet.getCell(config3Row, 4).value).toBe("Process 11");
     expect(sheet.getCell(config3Row, 5).value).toBe("대기 중");
-    expect(sheet.getCell(config3Row, 6).value).toBe("2026-08-13");
+    expect(sheet.getCell(config3Row, 6).value).toBe("2026-08-14");
     expect(sheet.getCell(config3Row, 7).value).toBe(0);
 
     const lightFill = sheet.getCell(config3Row, 3).fill as ExcelJS.FillPattern;
@@ -112,7 +112,7 @@ describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
 
   it("leaves not-started Configs' cells blank rather than filling in placeholder text", async () => {
     const dataset = getDataset();
-    const snapshot = { date: "2026-08-04", time: "9:00 A.M" };
+    const snapshot = { date: "2026-08-05", time: "9:00 A.M" };
     const rows = computeCurrentStatus(dataset.dailyPlan, dataset.processStatus, snapshot, DEFAULT_SCHEDULE_THRESHOLDS);
 
     const buffer = await buildProcessDashboardWorkbook(rows, snapshot, DEFAULT_SCHEDULE_THRESHOLDS);

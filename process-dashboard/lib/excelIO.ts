@@ -24,22 +24,34 @@ export function cell(aoa: AOA, row: number, col: number): unknown {
   return v === undefined || v === null ? "" : v;
 }
 
+/**
+ * This workbook's date cells convert (via SheetJS cellDates) to JS Date
+ * objects sitting a few hours before UTC midnight rather than exactly at
+ * it (observed e.g. as "...T14:59:08.000Z" instead of "...T00:00:00.000Z"),
+ * which floors to the wrong calendar day. Rounding to the nearest UTC day
+ * boundary instead of truncating recovers the intended date.
+ */
+function dateToISODate(d: Date): string {
+  const rounded = new Date(Math.round(d.getTime() / 86400000) * 86400000);
+  return rounded.toISOString().slice(0, 10);
+}
+
 export function cellStr(aoa: AOA, row: number, col: number): string {
   const v = cell(aoa, row, col);
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return dateToISODate(v);
   return String(v).trim();
 }
 
 export function toISODate(v: unknown): string {
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return dateToISODate(v);
   if (typeof v === "number") {
     // Excel serial date fallback (epoch 1899-12-30, handles the 1900 leap bug)
     const ms = Math.round((v - 25569) * 86400 * 1000);
-    return new Date(ms).toISOString().slice(0, 10);
+    return dateToISODate(new Date(ms));
   }
   const s = String(v).trim();
   const parsed = new Date(s);
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  if (!isNaN(parsed.getTime())) return dateToISODate(parsed);
   return s;
 }
 

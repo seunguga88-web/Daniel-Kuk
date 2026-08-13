@@ -12,16 +12,16 @@ describe("listSnapshots", () => {
   it("lists all 34 snapshots in chronological (date, then AM<PM) order", () => {
     const snaps = listSnapshots(getDataset().processStatus);
     expect(snaps).toHaveLength(34);
-    expect(snaps[0]).toEqual({ date: "2026-08-04", time: "9:00 A.M" });
-    expect(snaps[1]).toEqual({ date: "2026-08-04", time: "6:00 P.M" });
-    expect(snaps[snaps.length - 1]).toEqual({ date: "2026-08-20", time: "6:00 P.M" });
+    expect(snaps[0]).toEqual({ date: "2026-08-05", time: "9:00 A.M" });
+    expect(snaps[1]).toEqual({ date: "2026-08-05", time: "6:00 P.M" });
+    expect(snaps[snaps.length - 1]).toEqual({ date: "2026-08-21", time: "6:00 P.M" });
   });
 });
 
-describe("computeCurrentStatus on the real virtual data, 2026-08-13 9:00 A.M", () => {
+describe("computeCurrentStatus on the real virtual data, 2026-08-14 9:00 A.M", () => {
   it("returns one row per Config, grouped so each Config carries its Line", () => {
     const { dailyPlan, processStatus } = getDataset();
-    const rows = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-13", time: "9:00 A.M" });
+    const rows = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-14", time: "9:00 A.M" });
     expect(rows).toHaveLength(9);
     const line1Configs = rows.filter((r) => r.line === "Line 1").map((r) => r.config).sort();
     const line2Configs = rows.filter((r) => r.line === "Line 2").map((r) => r.config).sort();
@@ -31,18 +31,18 @@ describe("computeCurrentStatus on the real virtual data, 2026-08-13 9:00 A.M", (
 
   it("Config 3 is sitting at process 11, exactly on the Daily Plan target date", () => {
     const { dailyPlan, processStatus } = getDataset();
-    const rows = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-13", time: "9:00 A.M" });
+    const rows = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-14", time: "9:00 A.M" });
     const c3 = rows.find((r) => r.config === "Config 3")!;
     expect(c3.processState).toBe("in_progress");
     expect(c3.currentProcess).toBe("process 11");
-    expect(c3.planDate).toBe("2026-08-13");
+    expect(c3.planDate).toBe("2026-08-14");
     expect(c3.delayDays).toBe(0);
     expect(c3.status).toBe("계획준수");
   });
 
   it("Config 1 has already finished all 15 processes by this snapshot", () => {
     const { dailyPlan, processStatus } = getDataset();
-    const rows = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-13", time: "9:00 A.M" });
+    const rows = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-14", time: "9:00 A.M" });
     const c1 = rows.find((r) => r.config === "Config 1")!;
     expect(c1.processState).toBe("completed");
     expect(c1.status).toBe("완료");
