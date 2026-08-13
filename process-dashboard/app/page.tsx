@@ -14,7 +14,18 @@ import {
 } from "@/lib/yieldAnalysis";
 import { DEFAULT_SCHEDULE_THRESHOLDS, type ScheduleThresholds } from "@/lib/scheduleAnalysis";
 import { listSnapshots, computeCurrentStatus, type Snapshot } from "@/lib/currentStatus";
+import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
 import type { FileKind, ParsedDataset } from "@/lib/types";
+
+function downloadWorkbook(buffer: ArrayBuffer, fileName: string) {
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const KIND_LABEL: Record<FileKind, string> = {
   configInfo: "Config 정보",
@@ -174,6 +185,25 @@ export default function Home() {
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [currentStatusRows]);
 
+  async function handleDownloadYieldExcel() {
+    try {
+      const buffer = await buildYieldAnalysisWorkbook(yieldCells, processes, configs, thresholds, targetYields);
+      downloadWorkbook(buffer, "yield_analysis.xlsx");
+    } catch (err) {
+      console.error("Yield 분석 Excel 다운로드 실패:", err);
+    }
+  }
+
+  async function handleDownloadProcessDashboardExcel() {
+    if (!selectedSnapshot) return;
+    try {
+      const buffer = await buildProcessDashboardWorkbook(currentStatusRows, selectedSnapshot, scheduleThresholds);
+      downloadWorkbook(buffer, `process_dashboard_${selectedSnapshot.date}_${selectedSnapshot.time.replace(/[: ]/g, "")}.xlsx`);
+    } catch (err) {
+      console.error("Process Dashboard Excel 다운로드 실패:", err);
+    }
+  }
+
   return (
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem 1.5rem", fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>공정·출하 검증 대시보드</h1>
@@ -234,7 +264,12 @@ export default function Home() {
           </section>
 
           <section>
-            <h2 style={sectionTitle}>Yield / NG Analysis</h2>
+            <h2 style={sectionTitle}>
+              Yield / NG Analysis{" "}
+              <button onClick={handleDownloadYieldExcel} style={downloadButtonStyle}>
+                Excel 다운로드
+              </button>
+            </h2>
 
             <h3 style={{ fontSize: "1rem" }}>위험·주의 임계값 (화면에서 조정 가능)</h3>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
@@ -330,7 +365,12 @@ export default function Home() {
           </section>
 
           <section>
-            <h2 style={sectionTitle}>Process Dashboard — 현재 위치 + Daily Plan 대비 지연</h2>
+            <h2 style={sectionTitle}>
+              Process Dashboard — 현재 위치 + Daily Plan 대비 지연{" "}
+              <button onClick={handleDownloadProcessDashboardExcel} style={downloadButtonStyle}>
+                Excel 다운로드
+              </button>
+            </h2>
             <p style={{ color: "#555" }}>
               각 Config가 선택한 시점에 실제로 대기 중인 Process(Input은 있지만 Output이 아직 없는 가장 앞선 Process)와,
               그 Process가 Daily Plan상 며칠에 계획됐는지를 비교합니다.
@@ -440,3 +480,9 @@ const sectionTitle: CSSProperties = { fontSize: "1.2rem", marginTop: "2rem", bor
 const tableStyle: CSSProperties = { borderCollapse: "collapse", width: "100%", fontSize: "0.85rem" };
 const cellStyle: CSSProperties = { border: "1px solid #ddd", padding: "0.35rem 0.5rem", textAlign: "left", verticalAlign: "top" };
 const numInputStyle: CSSProperties = { width: "5rem", marginLeft: "0.4rem", display: "block" };
+const downloadButtonStyle: CSSProperties = {
+  fontSize: "0.8rem",
+  fontWeight: "normal",
+  padding: "0.2rem 0.6rem",
+  cursor: "pointer",
+};

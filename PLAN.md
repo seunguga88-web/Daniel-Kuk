@@ -10,6 +10,7 @@
   - 참고(발견, 고치지 않음): 원본 문서의 기본 임계값(90%/97%, 10%p/5%p)은 수율이 100%를 넘을 수 없다는 제약 때문에, "기준수율 대비 %p" 조건이 "절대 %" 조건보다 더 엄격하게 작동하는 경우가 실질적으로 없음(기준수율이 100%여도 절대 위험선 90%까지 최대 갭이 10%p라 항상 절대조건과 동시에 걸림). 목표 수율을 매우 높게 입력해도 이 특성은 동일함 — 화면에서 임계값을 직접 조정할 수 있으니 실사용에 문제는 없음.
 - ✅ **Phase 3 완료** (일정편차 + 지연 알람, 사용자 피드백 반영해 1차 설계에서 재설계함): 처음엔 Config×Process 전체 매트릭스로 만들었는데, 사용자가 원한 건 그게 아니라 "특정 시점 기준 각 Config가 지금 어느 Process에 대기 중인지 + 그게 Daily Plan 대비 며칠 차이인지"였음. Line별로 구분(Line 1 / Line 2)한 뒤 그 아래 Config를 배치하고, 화면에서 기준 시점(날짜+9AM/6PM)을 선택하면 각 Config의 "현재 대기 Process"(Input은 있지만 Output이 아직 없는 가장 앞선 Process)와 Daily Plan 계획일 대비 며칠 차이나는지(지연/선행/계획준수/완료)를 한 줄씩 보여주는 구조로 다시 만듦. 지연일수 임계값(기본 주의 2일/위험 3일)은 화면에서 조정 가능. 2026-08-13 9AM 기준 실제 값(예: Config 3 process 11 계획준수, Config 2는 process 15까지 가서 2일 선행)을 브라우저에서 직접 확인. 자동 테스트 27/27 통과. 코드 위치: `process-dashboard/lib/currentStatus.ts`, 테스트: `process-dashboard/tests/currentStatus.test.ts`. (기존 Config×Process 전체 매트릭스 방식의 `computeScheduleCells`와 그 테스트는 사용자 피드백에 따라 삭제함 — `scheduleAnalysis.ts`엔 이제 임계값 타입만 남음)
   - 추가 피드백 반영: 기준 시점을 날짜/시간 드롭다운 2개로 분리(기존엔 "날짜 시간" 합쳐진 드롭다운 1개)했고, 아직 시작 안 한 Config(Input조차 없음)는 표에서 해당 행을 빈칸으로 표시(이전엔 "process 1"/"미착수"로 채워서 보여줬음). 2026-08-04 9AM 기준으로 Config 1만 process 1에서 시작했고 나머지는 빈칸으로 뜨는 것을 브라우저에서 확인.
+- ✅ **(범위 외 추가 요청) Yield/NG Analysis·Process Dashboard Excel 다운로드**: 원래 "되면 좋은" 항목이었던 "분석 결과 Excel 다운로드"를 사용자 요청으로 두 화면에 한해 먼저 구현. ExcelJS로 각 화면의 데이터를 셀 단위로 쓰고(수율표는 Config×Process 숫자 셀 + 위험/주의 배경색, Process Dashboard는 Line/Config/현재Process/상태/계획일/지연일수/알람을 각각 별도 셀로), 위험/주의 셀은 배경색도 함께 적용. **셀 단위 반영 여부는 자동 테스트(vitest 5개, ExcelJS로 다시 읽어서 특정 셀 좌표의 값·색상을 직접 검증)로 확인했고, 브라우저에서 실제로 다운로드한 파일을 다시 열어(Node에서 ExcelJS로 재확인) Config 2의 Process 7 셀이 79.5와 위험색으로 정확히 들어있는 것까지 확인**. 코드 위치: `process-dashboard/lib/exportExcel.ts`, 테스트: `process-dashboard/tests/exportExcel.test.ts`.
 - ⬜ Phase 4~6: 아직 시작 전.
 
 ## ① 문제 정의 — 지금 무엇이 불편한가
@@ -40,7 +41,7 @@
 - **되면 좋은**:
   - 출하 수정 이력 관리 (Shipment Row ID 기준 변경 전후 추적)
   - NG Material 원인분석 질문 + 비교 Config 추천
-  - 분석 결과 Excel 다중시트 다운로드
+  - 분석 결과 Excel 다중시트 다운로드 (Yield/NG Analysis·Process Dashboard 2개는 사용자 요청으로 완료 — "진행 상황" 참고. Risk판정·D-1초안·출하 이력은 아직 안 만들어졌으니 남은 항목)
 
 - **이번엔 안 하는 것**:
   - 로그인·역할별 권한, 감사 로그, 백업 정책 등 운영 기능
