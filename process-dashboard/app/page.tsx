@@ -12,11 +12,8 @@ import {
   type Thresholds,
   type YieldStatus,
 } from "@/lib/yieldAnalysis";
-import {
-  computeScheduleCells,
-  DEFAULT_SCHEDULE_THRESHOLDS,
-  type ScheduleThresholds,
-} from "@/lib/scheduleAnalysis";
+import { DEFAULT_SCHEDULE_THRESHOLDS, type ScheduleThresholds } from "@/lib/scheduleAnalysis";
+import { listSnapshots, computeCurrentStatus, type Snapshot } from "@/lib/currentStatus";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 const KIND_LABEL: Record<FileKind, string> = {
@@ -132,16 +129,36 @@ export default function Home() {
     setScheduleThresholds((prev) => ({ ...prev, [key]: n }));
   }
 
-  const scheduleCells = useMemo(
-    () => (dataset ? computeScheduleCells(dataset.dailyPlan, dataset.processStatus, scheduleThresholds) : []),
-    [dataset, scheduleThresholds]
+  const snapshots = useMemo(() => (dataset ? listSnapshots(dataset.processStatus) : []), [dataset]);
+  const [selectedSnapshotKey, setSelectedSnapshotKey] = useState<string | null>(null);
+
+  const selectedSnapshot: Snapshot | null = useMemo(() => {
+    if (snapshots.length === 0) return null;
+    if (selectedSnapshotKey) {
+      const [date, time] = selectedSnapshotKey.split("|");
+      const found = snapshots.find((s) => s.date === date && s.time === time);
+      if (found) return found;
+    }
+    return snapshots[snapshots.length - 1]; // default: latest
+  }, [snapshots, selectedSnapshotKey]);
+
+  const currentStatusRows = useMemo(
+    () =>
+      dataset && selectedSnapshot
+        ? computeCurrentStatus(dataset.dailyPlan, dataset.processStatus, selectedSnapshot, scheduleThresholds)
+        : [],
+    [dataset, selectedSnapshot, scheduleThresholds]
   );
 
-  const scheduleByKey = useMemo(() => {
-    const m = new Map<string, (typeof scheduleCells)[number]>();
-    for (const c of scheduleCells) m.set(`${c.config}|${c.process}`, c);
-    return m;
-  }, [scheduleCells]);
+  const currentStatusByLine = useMemo(() => {
+    const m = new Map<string, typeof currentStatusRows>();
+    for (const row of currentStatusRows) {
+      const arr = m.get(row.line) ?? [];
+      arr.push(row);
+      m.set(row.line, arr);
+    }
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [currentStatusRows]);
 
   return (
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem 1.5rem", fontFamily: "system-ui, sans-serif" }}>
@@ -299,13 +316,27 @@ export default function Home() {
           </section>
 
           <section>
-            <h2 style={sectionTitle}>Process Dashboard — 일정편차 + 지연 알람</h2>
+            <h2 style={sectionTitle}>Process Dashboard — 현재 위치 + Daily Plan 대비 지연</h2>
             <p style={{ color: "#555" }}>
-              Daily Plan 날짜는 완료 목표일로 해석합니다. 지연일수 = 실제 Output 최초 발생일 - 계획일.
+              각 Config가 선택한 시점에 실제로 대기 중인 Process(Input은 있지만 Output이 아직 없는 가장 앞선 Process)와,
+              그 Process가 Daily Plan상 며칠에 계획됐는지를 비교합니다.
             </p>
 
-            <h3 style={{ fontSize: "1rem" }}>지연 알람 기준 (화면에서 조정 가능)</h3>
-            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
+              <label>
+                기준 시점
+                <select
+                  value={selectedSnapshot ? `${selectedSnapshot.date}|${selectedSnapshot.time}` : ""}
+                  onChange={(e) => setSelectedSnapshotKey(e.target.value)}
+                  style={{ display: "block", marginTop: "0.2rem" }}
+                >
+                  {snapshots.map((s) => (
+                    <option key={`${s.date}|${s.time}`} value={`${s.date}|${s.time}`}>
+                      {s.date} {s.time}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 주의(지연일수 이상)
                 <input
@@ -326,40 +357,43 @@ export default function Home() {
               </label>
             </div>
 
-            <h3 style={{ fontSize: "1rem" }}>Config × Process 일정편차</h3>
-            <div style={{ overflowX: "auto" }}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={cellStyle}>Config</th>
-                    {processes.map((p) => (
-                      <th key={p} style={cellStyle}>
-                        {p.replace("process ", "P")}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {configs.map((config) => (
-                    <tr key={config}>
-                      <td style={cellStyle}>{config}</td>
-                      {processes.map((p) => {
-                        const cell = scheduleByKey.get(`${config}|${p}`);
-                        if (!cell) return <td key={p} style={cellStyle}>-</td>;
-                        const bg =
-                          cell.alarmLevel === "risk" ? STATUS_COLOR.risk : cell.alarmLevel === "warning" ? STATUS_COLOR.warning : "transparent";
-                        return (
-                          <td key={p} style={{ ...cellStyle, background: bg }}>
-                            {cell.status}
-                            {cell.delayDays !== null && cell.delayDays !== 0 ? ` (${cell.delayDays > 0 ? "+" : ""}${cell.delayDays}일)` : ""}
-                          </td>
-                        );
-                      })}
+            {currentStatusByLine.map(([line, rows]) => (
+              <div key={line} style={{ marginBottom: "1.5rem" }}>
+                <h3 style={{ fontSize: "1rem" }}>{line}</h3>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={cellStyle}>Config</th>
+                      <th style={cellStyle}>현재 대기 Process</th>
+                      <th style={cellStyle}>상태</th>
+                      <th style={cellStyle}>Daily Plan 계획일</th>
+                      <th style={cellStyle}>Daily Plan 대비</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const bg =
+                        row.alarmLevel === "risk" ? STATUS_COLOR.risk : row.alarmLevel === "warning" ? STATUS_COLOR.warning : "transparent";
+                      return (
+                        <tr key={row.config} style={{ background: bg }}>
+                          <td style={cellStyle}>{row.config}</td>
+                          <td style={cellStyle}>{row.currentProcess ?? "-"}</td>
+                          <td style={cellStyle}>
+                            {row.processState === "completed" ? "완료" : row.processState === "not_started" ? "미착수" : "대기 중"}
+                          </td>
+                          <td style={cellStyle}>{row.planDate ?? "-"}</td>
+                          <td style={cellStyle}>
+                            {row.delayDays === null
+                              ? "-"
+                              : `${row.status} (${row.delayDays > 0 ? "+" : ""}${row.delayDays}일)`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </section>
         </>
       )}
