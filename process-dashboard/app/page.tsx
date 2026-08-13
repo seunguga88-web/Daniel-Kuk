@@ -16,7 +16,12 @@ import { DEFAULT_SCHEDULE_THRESHOLDS, type ScheduleThresholds } from "@/lib/sche
 import { listSnapshots, computeCurrentStatus, trafficLight, type Snapshot, type TrafficLight } from "@/lib/currentStatus";
 import { computeShipmentRisk, type RiskStatus } from "@/lib/shipmentRisk";
 import { computeShipmentDraft } from "@/lib/shipmentDraft";
-import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
+import {
+  buildYieldAnalysisWorkbook,
+  buildProcessDashboardWorkbook,
+  buildShipmentRiskWorkbook,
+  buildShipmentDraftWorkbook,
+} from "@/lib/exportExcel";
 import { saveUpload, loadUpload } from "@/lib/persistence";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
@@ -320,6 +325,26 @@ export default function Home() {
     }
   }
 
+  async function handleDownloadShipmentRiskExcel() {
+    if (!selectedSnapshot) return;
+    try {
+      const buffer = await buildShipmentRiskWorkbook(shipmentRiskRows, selectedSnapshot);
+      downloadWorkbook(buffer, `shipment_risk_${selectedSnapshot.date}_${selectedSnapshot.time.replace(/[: ]/g, "")}.xlsx`);
+    } catch (err) {
+      console.error("Shipment Risk Excel 다운로드 실패:", err);
+    }
+  }
+
+  async function handleDownloadShipmentDraftExcel() {
+    if (!selectedSnapshot) return;
+    try {
+      const buffer = await buildShipmentDraftWorkbook(shipmentDraftRows, selectedSnapshot);
+      downloadWorkbook(buffer, `shipment_draft_${selectedSnapshot.date}_${selectedSnapshot.time.replace(/[: ]/g, "")}.xlsx`);
+    } catch (err) {
+      console.error("Shipment Draft Excel 다운로드 실패:", err);
+    }
+  }
+
   return (
     <main className="app-shell">
       <h1>공정·출하 검증 대시보드</h1>
@@ -592,7 +617,12 @@ export default function Home() {
           </section>
 
           <section id="risk">
-            <h2 style={sectionTitle}>Shipment Risk — 출하 부족 Risk 판정</h2>
+            <h2 style={sectionTitle}>
+              Shipment Risk — 출하 부족 Risk 판정{" "}
+              <button onClick={handleDownloadShipmentRiskExcel} style={downloadButtonStyle}>
+                Excel 다운로드
+              </button>
+            </h2>
             <p style={{ color: "var(--muted)" }}>
               예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율. 부족분을 승인된 Waiver NG로 채울 수 있는지에 따라 판정합니다.
             </p>
@@ -635,7 +665,12 @@ export default function Home() {
           </section>
 
           <section id="draft">
-            <h2 style={sectionTitle}>Shipment Draft — 출하 D-1 초안</h2>
+            <h2 style={sectionTitle}>
+              Shipment Draft — 출하 D-1 초안{" "}
+              <button onClick={handleDownloadShipmentDraftExcel} style={downloadButtonStyle}>
+                Excel 다운로드
+              </button>
+            </h2>
             <p style={{ color: "var(--muted)" }}>기준 시점의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.</p>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
               <SnapshotPicker

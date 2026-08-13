@@ -4,6 +4,15 @@ import { computeBaseline, classifyYield } from "./yieldAnalysis";
 import type { CurrentStatusRow, Snapshot, TrafficLight } from "./currentStatus";
 import { trafficLight } from "./currentStatus";
 import type { ScheduleThresholds } from "./scheduleAnalysis";
+import type { ShipmentRiskRow, RiskStatus } from "./shipmentRisk";
+import type { ShipmentDraftRow } from "./shipmentDraft";
+
+const RISK_FILL: Record<RiskStatus, string | null> = {
+  OK: null,
+  Risk: "FFFEF08A",
+  "Waiver Dependent": "FFFED7AA",
+  Shortage: "FFFECACA",
+};
 
 const TRAFFIC_LIGHT_FILL: Record<NonNullable<TrafficLight>, string> = {
   green: "FF22C55E",
@@ -168,6 +177,91 @@ export async function buildProcessDashboardWorkbook(
   sheet.getColumn(6).width = 16;
   sheet.getColumn(7).width = 10;
   sheet.getColumn(8).width = 8;
+
+  return wb.xlsx.writeBuffer();
+}
+
+export async function buildShipmentRiskWorkbook(rows: ShipmentRiskRow[], snapshot: Snapshot): Promise<ExcelJS.Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Shipment Risk");
+
+  sheet.getCell("A1").value = "기준 시점";
+  sheet.getCell("B1").value = `${snapshot.date} ${snapshot.time}`;
+  sheet.getCell("A1").font = { bold: true };
+
+  const headerRowIdx = 3;
+  const header = ["Config", "현재 양품", "예상 최종 양품", "출하 계획", "승인 Waiver NG", "부족분", "판정"];
+  const headerRow = sheet.getRow(headerRowIdx);
+  header.forEach((h, i) => (headerRow.getCell(i + 1).value = h));
+  headerRow.font = { bold: true };
+
+  let r = headerRowIdx + 1;
+  for (const row of rows) {
+    const excelRow = sheet.getRow(r);
+    excelRow.getCell(1).value = row.config;
+    excelRow.getCell(2).value = row.currentGoodQty;
+    excelRow.getCell(3).value = Math.round(row.expectedFinalGood);
+    excelRow.getCell(4).value = row.totalShipment;
+    excelRow.getCell(5).value = row.approvedWaiverQty;
+    excelRow.getCell(6).value = Math.round(row.shortfall);
+    excelRow.getCell(7).value = row.status;
+
+    const fill = RISK_FILL[row.status];
+    if (fill) {
+      for (let c = 1; c <= 7; c++) {
+        excelRow.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+      }
+    }
+    r++;
+  }
+
+  sheet.getColumn(1).width = 12;
+  for (let i = 2; i <= 6; i++) sheet.getColumn(i).width = 14;
+  sheet.getColumn(7).width = 16;
+
+  return wb.xlsx.writeBuffer();
+}
+
+export async function buildShipmentDraftWorkbook(rows: ShipmentDraftRow[], snapshot: Snapshot): Promise<ExcelJS.Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Shipment Draft");
+
+  sheet.getCell("A1").value = "기준 시점";
+  sheet.getCell("B1").value = `${snapshot.date} ${snapshot.time}`;
+  sheet.getCell("A1").font = { bold: true };
+
+  let r = 3;
+  if (rows.length === 0) {
+    sheet.getCell(`A${r}`).value = "이 기준 시점 기준으로 다음 날 출하 예정인 Config가 없습니다.";
+    return wb.xlsx.writeBuffer();
+  }
+
+  for (const row of rows) {
+    sheet.getCell(`A${r}`).value =
+      `${row.config} — 출하일 ${row.shipDate} (OK 가능 ${Math.round(row.okAvailable)} / Waiver 필요 ${Math.round(row.waiverNeeded)} / 계획 ${row.totalShipment})`;
+    sheet.getCell(`A${r}`).font = { bold: true };
+    r++;
+
+    const header = ["Destination", "계획 수량", "OK 배정", "Waiver 배정", "합계"];
+    const headerRow = sheet.getRow(r);
+    header.forEach((h, i) => (headerRow.getCell(i + 1).value = h));
+    headerRow.font = { bold: true };
+    r++;
+
+    for (const a of row.allocations) {
+      const excelRow = sheet.getRow(r);
+      excelRow.getCell(1).value = a.destination;
+      excelRow.getCell(2).value = a.planQty;
+      excelRow.getCell(3).value = Math.round(a.okQty);
+      excelRow.getCell(4).value = Math.round(a.waiverQty);
+      excelRow.getCell(5).value = Math.round(a.totalQty);
+      r++;
+    }
+    r++; // blank row between Configs
+  }
+
+  sheet.getColumn(1).width = 16;
+  for (let i = 2; i <= 5; i++) sheet.getColumn(i).width = 12;
 
   return wb.xlsx.writeBuffer();
 }

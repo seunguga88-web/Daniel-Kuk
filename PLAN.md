@@ -22,6 +22,7 @@
 
 **PLAN.md 문서에 정의된 6개 Phase 모두 완료.** "되면 좋은" 3개 항목(출하 수정 이력, NG Material 원인분석, Excel 다운로드 — 이 중 Yield/Process Dashboard 2개는 이미 만듦)은 이번 세션에서 다루지 않기로 한 대로 남겨둠.
 - ✅ **(범위 외 추가 요청) 전체 디자인 개선**: 인라인 스타일 위주였던 화면을 globals.css 중심의 디자인 시스템으로 정리(색상·간격·타이포그래피 변수, 카드형 섹션, 고정 상단 메뉴, 다듬어진 표/버튼/입력창 스타일, 부드러운 상태 배경색, 다크모드 대응). 로직/계산 코드는 손대지 않고 화면만 개선. tsc/vitest(57/57)/eslint 모두 통과, 브라우저에서 확인. 코드 위치: `process-dashboard/app/globals.css`, `process-dashboard/app/page.tsx`.
+- ✅ **(범위 외 추가 요청) Shipment Risk·Shipment Draft Excel 다운로드**: 나머지 세 화면(Upload Center 제외 전부)에 Excel 다운로드 완비. Shipment Risk는 Config별 판정 행에 색을 입혀서, Shipment Draft는 Config별 블록(제목+Destination표)을 시트 하나에 순서대로 기록. 자동 테스트 3개 추가(60/60 전체 통과, 셀 좌표 직접 검증) + 브라우저에서 실제 다운로드해 ExcelJS로 재확인.
 
 ## ① 문제 정의 — 지금 무엇이 불편한가
 

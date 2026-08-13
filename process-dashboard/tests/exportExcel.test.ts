@@ -5,7 +5,9 @@ import { loadVirtualDataInputs } from "./fixtures";
 import { computeYieldCells, DEFAULT_THRESHOLDS } from "../lib/yieldAnalysis";
 import { listSnapshots, computeCurrentStatus } from "../lib/currentStatus";
 import { DEFAULT_SCHEDULE_THRESHOLDS } from "../lib/scheduleAnalysis";
-import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "../lib/exportExcel";
+import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook, buildShipmentRiskWorkbook, buildShipmentDraftWorkbook } from "../lib/exportExcel";
+import { computeShipmentRisk } from "../lib/shipmentRisk";
+import { computeShipmentDraft } from "../lib/shipmentDraft";
 
 function getDataset() {
   return parseAllFiles(loadVirtualDataInputs()).dataset;
@@ -137,5 +139,85 @@ describe("buildProcessDashboardWorkbook — cell-by-cell round trip", () => {
 describe("listSnapshots sanity (used to pick the export snapshot)", () => {
   it("still returns 34 entries", () => {
     expect(listSnapshots(getDataset().processStatus)).toHaveLength(34);
+  });
+});
+
+describe("buildShipmentRiskWorkbook — cell-by-cell round trip", () => {
+  it("writes each Config's risk numbers in their own cells, with Waiver Dependent rows filled", async () => {
+    const dataset = getDataset();
+    const yieldCells = computeYieldCells(dataset.processStatus);
+    const snapshot = { date: "2026-08-21", time: "6:00 P.M" };
+    const rows = computeShipmentRisk(dataset.processStatus, dataset.shipmentPlan, dataset.shipmentTable, yieldCells, {}, snapshot);
+
+    const buffer = await buildShipmentRiskWorkbook(rows, snapshot);
+    const wb = await loadWorkbook(buffer);
+    const sheet = wb.getWorksheet("Shipment Risk")!;
+
+    expect(sheet.getCell("A1").value).toBe("기준 시점");
+    expect(sheet.getCell("B1").value).toBe("2026-08-21 6:00 P.M");
+    expect(sheet.getCell("A3").value).toBe("Config");
+
+    let c2Row = -1;
+    for (let r = 4; r <= 4 + rows.length; r++) {
+      if (sheet.getCell(r, 1).value === "Config 2") {
+        c2Row = r;
+        break;
+      }
+    }
+    expect(c2Row).toBeGreaterThan(0);
+    expect(sheet.getCell(c2Row, 2).value).toBe(800);
+    expect(sheet.getCell(c2Row, 3).value).toBe(800);
+    expect(sheet.getCell(c2Row, 4).value).toBe(1000);
+    expect(sheet.getCell(c2Row, 5).value).toBe(200);
+    expect(sheet.getCell(c2Row, 6).value).toBe(200);
+    expect(sheet.getCell(c2Row, 7).value).toBe("Waiver Dependent");
+
+    const fill = sheet.getCell(c2Row, 7).fill as ExcelJS.FillPattern;
+    expect(fill.fgColor?.argb).toBe("FFFED7AA");
+  });
+});
+
+describe("buildShipmentDraftWorkbook — cell-by-cell round trip", () => {
+  it("writes Config 2's D-1 draft allocation with each destination in its own row", async () => {
+    const dataset = getDataset();
+    const yieldCells = computeYieldCells(dataset.processStatus);
+    const snapshot = { date: "2026-08-14", time: "6:00 P.M" };
+    const priority = ["Destination 1", "Destination 2", "Destination 3", "Destination 4"];
+    const rows = computeShipmentDraft(snapshot, dataset.dailyPlan, dataset.shipmentPlan, dataset.processStatus, yieldCells, {}, priority);
+
+    const buffer = await buildShipmentDraftWorkbook(rows, snapshot);
+    const wb = await loadWorkbook(buffer);
+    const sheet = wb.getWorksheet("Shipment Draft")!;
+
+    expect(sheet.getCell("B1").value).toBe("2026-08-14 6:00 P.M");
+
+    let titleRow = -1;
+    for (let r = 1; r <= 40; r++) {
+      const v = sheet.getCell(r, 1).value;
+      if (typeof v === "string" && v.startsWith("Config 2 —")) {
+        titleRow = r;
+        break;
+      }
+    }
+    expect(titleRow).toBeGreaterThan(0);
+    expect(sheet.getCell(titleRow, 1).value).toBe("Config 2 — 출하일 2026-08-15 (OK 가능 800 / Waiver 필요 200 / 계획 1000)");
+
+    const headerRow = titleRow + 1;
+    expect(sheet.getCell(headerRow, 1).value).toBe("Destination");
+
+    const d3Row = headerRow + 3; // Destination 1, 2, 3 in that order
+    expect(sheet.getCell(d3Row, 1).value).toBe("Destination 3");
+    expect(sheet.getCell(d3Row, 2).value).toBe(100);
+    expect(sheet.getCell(d3Row, 3).value).toBe(50);
+    expect(sheet.getCell(d3Row, 4).value).toBe(50);
+    expect(sheet.getCell(d3Row, 5).value).toBe(100);
+  });
+
+  it("writes a plain message when nothing ships the next day", async () => {
+    const snapshot = { date: "2026-08-05", time: "9:00 A.M" };
+    const buffer = await buildShipmentDraftWorkbook([], snapshot);
+    const wb = await loadWorkbook(buffer);
+    const sheet = wb.getWorksheet("Shipment Draft")!;
+    expect(sheet.getCell("A3").value).toBe("이 기준 시점 기준으로 다음 날 출하 예정인 Config가 없습니다.");
   });
 });
