@@ -12,6 +12,11 @@ import {
   type Thresholds,
   type YieldStatus,
 } from "@/lib/yieldAnalysis";
+import {
+  computeScheduleCells,
+  DEFAULT_SCHEDULE_THRESHOLDS,
+  type ScheduleThresholds,
+} from "@/lib/scheduleAnalysis";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 const KIND_LABEL: Record<FileKind, string> = {
@@ -118,6 +123,25 @@ export default function Home() {
     if (raw.trim() === "" || isNaN(n)) return;
     setThresholds((prev) => ({ ...prev, [key]: n }));
   }
+
+  const [scheduleThresholds, setScheduleThresholds] = useState<ScheduleThresholds>(DEFAULT_SCHEDULE_THRESHOLDS);
+
+  function handleScheduleThresholdChange(key: keyof ScheduleThresholds, raw: string) {
+    const n = Number(raw);
+    if (raw.trim() === "" || isNaN(n)) return;
+    setScheduleThresholds((prev) => ({ ...prev, [key]: n }));
+  }
+
+  const scheduleCells = useMemo(
+    () => (dataset ? computeScheduleCells(dataset.dailyPlan, dataset.processStatus, scheduleThresholds) : []),
+    [dataset, scheduleThresholds]
+  );
+
+  const scheduleByKey = useMemo(() => {
+    const m = new Map<string, (typeof scheduleCells)[number]>();
+    for (const c of scheduleCells) m.set(`${c.config}|${c.process}`, c);
+    return m;
+  }, [scheduleCells]);
 
   return (
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem 1.5rem", fontFamily: "system-ui, sans-serif" }}>
@@ -264,6 +288,70 @@ export default function Home() {
                         return (
                           <td key={p} style={{ ...cellStyle, background: STATUS_COLOR[status] }} title={STATUS_LABEL[status]}>
                             {(cell.yieldFrac * 100).toFixed(1)}%
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section>
+            <h2 style={sectionTitle}>Process Dashboard — 일정편차 + 지연 알람</h2>
+            <p style={{ color: "#555" }}>
+              Daily Plan 날짜는 완료 목표일로 해석합니다. 지연일수 = 실제 Output 최초 발생일 - 계획일.
+            </p>
+
+            <h3 style={{ fontSize: "1rem" }}>지연 알람 기준 (화면에서 조정 가능)</h3>
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+              <label>
+                주의(지연일수 이상)
+                <input
+                  type="number"
+                  defaultValue={scheduleThresholds.warningDays}
+                  onChange={(e) => handleScheduleThresholdChange("warningDays", e.target.value)}
+                  style={numInputStyle}
+                />
+              </label>
+              <label>
+                위험(지연일수 이상)
+                <input
+                  type="number"
+                  defaultValue={scheduleThresholds.riskDays}
+                  onChange={(e) => handleScheduleThresholdChange("riskDays", e.target.value)}
+                  style={numInputStyle}
+                />
+              </label>
+            </div>
+
+            <h3 style={{ fontSize: "1rem" }}>Config × Process 일정편차</h3>
+            <div style={{ overflowX: "auto" }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={cellStyle}>Config</th>
+                    {processes.map((p) => (
+                      <th key={p} style={cellStyle}>
+                        {p.replace("process ", "P")}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {configs.map((config) => (
+                    <tr key={config}>
+                      <td style={cellStyle}>{config}</td>
+                      {processes.map((p) => {
+                        const cell = scheduleByKey.get(`${config}|${p}`);
+                        if (!cell) return <td key={p} style={cellStyle}>-</td>;
+                        const bg =
+                          cell.alarmLevel === "risk" ? STATUS_COLOR.risk : cell.alarmLevel === "warning" ? STATUS_COLOR.warning : "transparent";
+                        return (
+                          <td key={p} style={{ ...cellStyle, background: bg }}>
+                            {cell.status}
+                            {cell.delayDays !== null && cell.delayDays !== 0 ? ` (${cell.delayDays > 0 ? "+" : ""}${cell.delayDays}일)` : ""}
                           </td>
                         );
                       })}
