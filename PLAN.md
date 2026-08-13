@@ -23,10 +23,10 @@
 
 - **반드시 (이게 안 되면 실패)**:
   1. 5개 Excel 업로드 + 정합성 자동검증 (Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG 등)
-  2. Daily Plan 대비 Config·Process별 일정편차 표시 (지연/선행/진행중/계획준수)
-  3. Process별 수율 이상점 자동탐지 (기준 수율 대비 위험/주의/정상)
+  2. Daily Plan 대비 Config·Process별 일정편차 표시 (지연/선행/진행중/계획준수) + 먼저 시작된 Config 대비 Process별 진행속도 지연 알람 (위험/주의)
+  3. Process별 수율 이상점 자동탐지 (기준 수율 대비 위험/주의/정상, 화면에서 Process별 목표 수율 입력 가능 — 입력 시 그 값을 기준 수율로 사용, 미입력 Process는 자동계산 값 사용)
   4. 출하 부족 Risk 판정 (OK/Risk/Waiver Dependent/Shortage)
-  5. 출하 D-1 Destination별 출하 초안 자동생성
+  5. 출하 D-1 Destination별 출하 초안 자동생성 (화면에서 설정하는 전체 Destination 공통 우선순위에 따라 OK 배정)
 
 - **되면 좋은**:
   - 출하 수정 이력 관리 (Shipment Row ID 기준 변경 전후 추적)
@@ -41,14 +41,14 @@
 ## ④ Phase 분할과 각 Phase 완료 기준
 
 1. Excel Parser + 정합성 검증 — 완료: 5개 파일 업로드 시 헤더 기준으로 파일 종류가 자동 판별되고, 정합성 위반 케이스(예: Input≠Output+NG)를 넣으면 오류 위치가 화면에 표시된다.
-2. 공정 분석 엔진(일정편차+수율이상점) — 완료: 가상데이터 기준 Config 2·4의 Process 7·11이 수율 이상점(위험/주의)으로 자동 표시되고, Config·Process별 일정편차(지연/선행/진행중/준수)가 표에 나타난다. Daily Plan 날짜는 "완료 목표일"로 해석한다(해당 날짜 안에 Output 완료 필요). 완료 후 사용자 승인을 받고 Phase 3으로 진행한다.
+2. 공정 분석 엔진(일정편차+수율이상점+Config간 진행속도 알람) — 완료: 가상데이터 기준 Config 2·4의 Process 7·11이 수율 이상점(위험/주의)으로 자동 표시되고, 화면에서 Process별 목표 수율을 입력하면 그 값이 기준 수율로 쓰여 이상점 판정 결과가 바뀐다 (미입력 Process는 기존처럼 여러 Config의 중간값을 자동계산해서 기준 수율로 사용). Config·Process별 일정편차(지연/선행/진행중/준수)가 표에 나타난다. Daily Plan 날짜는 "완료 목표일"로 해석한다(해당 날짜 안에 Output 완료 필요). 추가로 Config별 Process별 경과일(=해당 Config Process 1 Input 최초 발생일 → 해당 Process Output 최초 발생일까지 날짜 수)을 계산해서, 먼저 시작된 Config들의 같은 Process 최소 경과일보다 2일 이상 느리면 위험, 1일 이상 느리면 주의로 알람 표시한다. 가장 먼저 시작한 Config는 비교 기준으로만 쓰고 알람 대상에서 제외한다. 완료 후 사용자 승인을 받고 Phase 3으로 진행한다.
 3. 출하 부족 Risk 판정 — 완료: 가상데이터 기준 Config 2·4가 Waiver Dependent로, 다른 정상 Config는 OK로 정확히 표시된다.
-4. 출하 D-1 초안 생성 — 완료: Daily Plan 기준 다음날 출하 대상 Config에 대해 Destination별 OK/Waiver 배정 초안 표가 생성된다 (Config 2·4 가상데이터로 검증). OK 물량이 Destination 계획 합계보다 부족할 때는 Destination 1부터 순서대로 배정하는 것을 MVP 규칙으로 한다.
+4. 출하 D-1 초안 생성 — 완료: Daily Plan 기준 다음날 출하 대상 Config에 대해 Destination별 OK/Waiver 배정 초안 표가 생성된다 (Config 2·4 가상데이터로 검증). 화면에서 Destination 우선순위(전체 Config 공통, 순서 변경 가능)를 설정할 수 있고, OK 물량이 Destination 계획 합계보다 부족할 때는 그 우선순위 순서대로 배정한다. 우선순위를 바꾸면 배정 결과도 그에 맞게 바뀐다.
 5. 대시보드 통합 — 완료: 업로드→분석→초안까지 하나의 화면 흐름(메뉴 전환)으로 이어지고, 새로고침 후에도 최근 업로드 결과가 유지된다.
 
 ## ⑤ 완료를 판정할 방법 (검증 게이트)
 
-- **기계가 판정하는 것**: 정합성 검증 규칙 6종(Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG, 이전 Output=다음 Input 등), Config 2·4 이상점/Risk 자동판정 결과가 가상데이터 기준값과 일치하는지 자동 테스트로 확인.
+- **기계가 판정하는 것**: 정합성 검증 규칙 6종(Config 일치, Shipment Qty=Total Shipment=OK+Waiver, Destination 합계=Total Shipment, Input=Output+NG, 이전 Output=다음 Input 등), Config 2·4 이상점/Risk 자동판정 결과가 가상데이터 기준값과 일치하는지, Destination 우선순위를 바꾸면 OK 배정 순서가 그에 맞게 바뀌는지, Config간 진행속도 알람이 가상데이터로 재현되는지(의도적으로 느린 Config를 넣었을 때 위험/주의로 표시되는지), Process별 목표 수율을 입력하면 이상점 판정 결과가 그 값 기준으로 바뀌는지 자동 테스트로 확인.
 - **사람이 눈으로 보는 것**: 대시보드 화면의 표·색상 표시가 실제로 읽기 쉬운지, 출하 D-1 초안 표의 배정 결과가 상식적으로 맞는지.
 - **내가 직접 승인할 지점**: Phase 1(Parser) 완료 후 실제 진행 여부, Phase 2(이상점 탐지) 결과가 Config 2·4 사례와 맞는지 확인한 뒤 Phase 3 진행, Phase 3(Risk 판정) 결과가 문서 예시(Config 2·4 Waiver Dependent)와 일치하는지 확인한 뒤 Phase 4 진행.
 
@@ -57,7 +57,7 @@ https://github.com/seunguga88-web/Daniel-Kuk.git
 
 ## 1:1 코칭에서 가장 묻고 싶은 것
 
-- Process별 수율 위험(90% 미만)/주의(97% 미만) 기준값을 MVP에서 코드 상수로 고정해도 되는지, 아니면 관리자가 조정 가능한 화면이 실제로 꼭 필요한지 — 반박 단계에서 이 지적은 받아들이지 않고 미정으로 남음.
+- Process별 목표 수율은 화면 입력으로 해결됐지만, 위험/주의를 가르는 절대 임계값(90%/97%, 기준수율 대비 10%p/5%p)과 Config간 진행속도 알람 기준(2일/1일) 자체는 여전히 코드 상수로 고정 — 이것도 화면에서 조정 가능해야 하는지는 미정으로 남음.
 
 --- 아래는 폼에 넣지 않는 작업 메모 ---
 
@@ -69,7 +69,7 @@ https://github.com/seunguga88-web/Daniel-Kuk.git
 
 반박에서 나온 5개 지적 중 4개 수용, 1개는 미정으로 유보:
 
-- **수용 1**: 출하 D-1 초안의 Destination 배정 규칙이 미정이었음 → MVP 규칙(Destination 1부터 순서대로 배정)을 Phase 4 완료조건에 추가함.
+- **수용 1**: 출하 D-1 초안의 Destination 배정 규칙이 미정이었음 → 최초엔 MVP 규칙(Destination 1부터 순서대로 배정)으로 정했으나, 이후 사용자 요청으로 화면에서 우선순위를 직접 설정하는 방식으로 변경함(전체 Destination 공통 순서, Phase 4 완료조건에 반영).
 - **수용 2 (기준값 고정)**: 받아들이지 않음 → "1:1 코칭에서 가장 묻고 싶은 것"으로 이관.
 - **수용 3**: Phase 2, 4, 5에 승인 지점이 없었음 → Phase 2 완료 후 승인 지점을 추가함(Phase 4·5는 그대로 유보, 필요시 진행 중 추가 가능).
 - **수용 4 (Phase 1 부담)**: Phase 1이 5종 파서+6개 검증규칙으로 다른 Phase보다 무겁다는 지적은 인지했으나, Phase 재분할은 하지 않고 그대로 진행하기로 함 — 실제 구현 중 시간이 부족하면 그때 현장에서 조정.
