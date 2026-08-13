@@ -80,8 +80,8 @@ const KIND_LABEL: Record<FileKind, string> = {
 };
 
 const STATUS_COLOR: Record<YieldStatus, string> = {
-  risk: "#fecaca",
-  warning: "#fef08a",
+  risk: "rgba(239, 68, 68, 0.18)",
+  warning: "rgba(234, 179, 8, 0.2)",
   normal: "transparent",
 };
 
@@ -93,9 +93,9 @@ const TRAFFIC_LIGHT_COLOR: Record<NonNullable<TrafficLight>, string> = {
 
 const RISK_STATUS_COLOR: Record<RiskStatus, string> = {
   OK: "transparent",
-  Risk: "#fef08a",
-  "Waiver Dependent": "#fed7aa",
-  Shortage: "#fecaca",
+  Risk: "rgba(234, 179, 8, 0.2)",
+  "Waiver Dependent": "rgba(249, 115, 22, 0.18)",
+  Shortage: "rgba(239, 68, 68, 0.18)",
 };
 
 const STATUS_LABEL: Record<YieldStatus, string> = {
@@ -321,32 +321,25 @@ export default function Home() {
   }
 
   return (
-    <main style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem 1.5rem", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>공정·출하 검증 대시보드</h1>
-      <p style={{ color: "#555", marginBottom: "1.5rem" }}>
-        5종 Excel 파일을 한꺼번에 선택해 업로드하세요. 파일명이 아니라 헤더·구조로 종류를 자동 판별합니다.
-      </p>
+    <main className="app-shell">
+      <h1>공정·출하 검증 대시보드</h1>
+      <p>5종 Excel 파일을 한꺼번에 선택해 업로드하세요. 파일명이 아니라 헤더·구조로 종류를 자동 판별합니다.</p>
 
-      <input
-        type="file"
-        multiple
-        accept=".xlsx"
-        onChange={(e) => handleFiles(e.target.files)}
-        style={{ marginBottom: "1.5rem" }}
-      />
-
-      {loading && <p>파싱 중...</p>}
+      <div className="upload-row">
+        <input type="file" multiple accept=".xlsx" onChange={(e) => handleFiles(e.target.files)} />
+        {loading && <span className="loading-note">파싱 중...</span>}
+      </div>
 
       {dataset && (
         <>
-          <nav style={navStyle}>
+          <nav className="topnav">
             <a href="#upload">Upload Center</a>
             <a href="#yield">Yield / NG Analysis</a>
             <a href="#process">Process Dashboard</a>
             <a href="#risk">Shipment Risk</a>
             <a href="#draft">Shipment Draft</a>
             {lastSavedAt && (
-              <span style={{ marginLeft: "auto", color: "#888", fontSize: "0.8rem" }}>
+              <span className="topnav-meta">
                 마지막 업로드 저장: {new Date(lastSavedAt).toLocaleString("ko-KR")} (새로고침해도 유지됩니다)
               </span>
             )}
@@ -362,14 +355,14 @@ export default function Home() {
               ))}
             </ul>
             {unrecognizedFiles.length > 0 && (
-              <p style={{ color: "#b91c1c" }}>인식 실패: {unrecognizedFiles.join(", ")}</p>
+              <p style={{ color: "var(--danger)" }}>인식 실패: {unrecognizedFiles.join(", ")}</p>
             )}
 
             <h3 style={{ fontSize: "1rem", marginTop: "1rem" }}>
               정합성 검증 결과 {errors.length === 0 ? "— 이상 없음" : `— ${errors.length}건 위반`}
             </h3>
             {errors.length === 0 ? (
-              <p style={{ color: "#15803d" }}>6개 검증 규칙 모두 통과했습니다.</p>
+              <p style={{ color: "var(--success)" }}>6개 검증 규칙 모두 통과했습니다.</p>
             ) : (
               <table style={tableStyle}>
                 <thead>
@@ -451,9 +444,9 @@ export default function Home() {
                     placeholder={`${(baselineByProcess.get(p)! * 100).toFixed(1)}(자동)`}
                     value={targetYieldInputs[p] ?? ""}
                     onChange={(e) => handleTargetYieldChange(p, e.target.value)}
-                    style={{ ...numInputStyle, borderColor: targetYieldErrors[p] ? "#b91c1c" : "#ccc" }}
+                    style={{ ...numInputStyle, borderColor: targetYieldErrors[p] ? "var(--danger)" : "#ccc" }}
                   />
-                  {targetYieldErrors[p] && <div style={{ color: "#b91c1c", fontSize: "0.75rem" }}>{targetYieldErrors[p]}</div>}
+                  {targetYieldErrors[p] && <div style={{ color: "var(--danger)", fontSize: "0.75rem" }}>{targetYieldErrors[p]}</div>}
                 </label>
               ))}
             </div>
@@ -500,7 +493,7 @@ export default function Home() {
                 Excel 다운로드
               </button>
             </h2>
-            <p style={{ color: "#555" }}>
+            <p style={{ color: "var(--muted)" }}>
               각 Config가 선택한 시점에 실제로 대기 중인 Process(Input은 있지만 Output이 아직 없는 가장 앞선 Process)와,
               그 Process가 Daily Plan상 며칠에 계획됐는지를 비교합니다.
             </p>
@@ -574,10 +567,11 @@ export default function Home() {
                                 title={light}
                                 style={{
                                   display: "inline-block",
-                                  width: "0.8rem",
-                                  height: "0.8rem",
+                                  width: "0.7rem",
+                                  height: "0.7rem",
                                   borderRadius: "50%",
                                   background: TRAFFIC_LIGHT_COLOR[light],
+                                  boxShadow: "0 0 0 2px var(--surface)",
                                 }}
                               />
                             )}
@@ -599,7 +593,7 @@ export default function Home() {
 
           <section id="risk">
             <h2 style={sectionTitle}>Shipment Risk — 출하 부족 Risk 판정</h2>
-            <p style={{ color: "#555" }}>
+            <p style={{ color: "var(--muted)" }}>
               예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율. 부족분을 승인된 Waiver NG로 채울 수 있는지에 따라 판정합니다.
             </p>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
@@ -642,7 +636,7 @@ export default function Home() {
 
           <section id="draft">
             <h2 style={sectionTitle}>Shipment Draft — 출하 D-1 초안</h2>
-            <p style={{ color: "#555" }}>기준 시점의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.</p>
+            <p style={{ color: "var(--muted)" }}>기준 시점의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.</p>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
               <SnapshotPicker
                 availableDates={availableDates}
@@ -670,7 +664,7 @@ export default function Home() {
             </ol>
 
             {shipmentDraftRows.length === 0 ? (
-              <p style={{ color: "#555" }}>이 기준 시점 기준으로 다음 날 출하 예정인 Config가 없습니다.</p>
+              <p style={{ color: "var(--muted)" }}>이 기준 시점 기준으로 다음 날 출하 예정인 Config가 없습니다.</p>
             ) : (
               shipmentDraftRows.map((row) => (
                 <div key={row.config} style={{ marginBottom: "1.5rem" }}>
@@ -710,31 +704,14 @@ export default function Home() {
   );
 }
 
-const sectionTitle: CSSProperties = { fontSize: "1.2rem", marginTop: "2rem", borderTop: "1px solid #ddd", paddingTop: "1rem" };
-const tableStyle: CSSProperties = { borderCollapse: "collapse", width: "100%", fontSize: "0.85rem" };
-const cellStyle: CSSProperties = { border: "1px solid #ddd", padding: "0.35rem 0.5rem", textAlign: "left", verticalAlign: "top" };
-const numInputStyle: CSSProperties = { width: "5rem", marginLeft: "0.4rem", display: "block" };
-const downloadButtonStyle: CSSProperties = {
-  fontSize: "0.8rem",
-  fontWeight: "normal",
-  padding: "0.2rem 0.6rem",
-  cursor: "pointer",
-};
-const priorityButtonStyle: CSSProperties = {
-  marginLeft: "0.5rem",
-  padding: "0.05rem 0.4rem",
-  cursor: "pointer",
-};
-const navStyle: CSSProperties = {
-  display: "flex",
-  gap: "1.2rem",
-  alignItems: "center",
-  flexWrap: "wrap",
-  padding: "0.6rem 0",
-  marginBottom: "0.5rem",
-  borderBottom: "1px solid #ddd",
-  position: "sticky",
-  top: 0,
-  background: "#fff",
-  zIndex: 1,
-};
+// Structural look (spacing, borders, typography, hover states) now lives in
+// globals.css as element-level rules (section/table/th/td/input/button), so
+// these stay empty/minimal — kept as named hooks at existing call sites
+// rather than touching every element, plus a few per-instance size tweaks
+// CSS can't express generically.
+const sectionTitle: CSSProperties = {};
+const tableStyle: CSSProperties = {};
+const cellStyle: CSSProperties = {};
+const numInputStyle: CSSProperties = { width: "5.5rem" };
+const downloadButtonStyle: CSSProperties = { fontSize: "0.75rem", fontWeight: 600, padding: "0.3rem 0.7rem" };
+const priorityButtonStyle: CSSProperties = { marginLeft: "0.4rem", padding: "0.1rem 0.45rem" };

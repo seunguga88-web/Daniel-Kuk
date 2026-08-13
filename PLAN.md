@@ -21,6 +21,7 @@
 - ✅ **Phase 6 완료** (대시보드 통합): 상단에 sticky 메뉴 바(Upload Center / Yield·NG Analysis / Process Dashboard / Shipment Risk / Shipment Draft)를 추가해 각 섹션으로 바로 이동 가능. 업로드 결과(파싱된 5개 파일 데이터)를 localStorage에 저장해서, **브라우저를 새로고침해도 파일을 다시 올릴 필요 없이 모든 화면(수율표·Process Dashboard·Risk·Draft)이 그대로 유지됨을 실제로 새로고침해서 확인**. "마지막 업로드 저장: 일시" 표시도 추가. 자동 테스트 4개 추가(57/57 전체 통과, 브라우저 전용 기능이라 localStorage는 메모리 목으로 테스트). `npm run build`는 이번엔 dev 서버가 `.next` 폴더를 물고 있어 일시적 EPERM으로 실패했지만 tsc/vitest/eslint는 모두 통과했고 실제 브라우저 동작으로 확인함. 코드 위치: `process-dashboard/lib/persistence.ts`, `process-dashboard/app/page.tsx`.
 
 **PLAN.md 문서에 정의된 6개 Phase 모두 완료.** "되면 좋은" 3개 항목(출하 수정 이력, NG Material 원인분석, Excel 다운로드 — 이 중 Yield/Process Dashboard 2개는 이미 만듦)은 이번 세션에서 다루지 않기로 한 대로 남겨둠.
+- ✅ **(범위 외 추가 요청) 전체 디자인 개선**: 인라인 스타일 위주였던 화면을 globals.css 중심의 디자인 시스템으로 정리(색상·간격·타이포그래피 변수, 카드형 섹션, 고정 상단 메뉴, 다듬어진 표/버튼/입력창 스타일, 부드러운 상태 배경색, 다크모드 대응). 로직/계산 코드는 손대지 않고 화면만 개선. tsc/vitest(57/57)/eslint 모두 통과, 브라우저에서 확인. 코드 위치: `process-dashboard/app/globals.css`, `process-dashboard/app/page.tsx`.
 
 ## ① 문제 정의 — 지금 무엇이 불편한가
 
