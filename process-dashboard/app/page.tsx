@@ -130,17 +130,31 @@ export default function Home() {
   }
 
   const snapshots = useMemo(() => (dataset ? listSnapshots(dataset.processStatus) : []), [dataset]);
-  const [selectedSnapshotKey, setSelectedSnapshotKey] = useState<string | null>(null);
 
-  const selectedSnapshot: Snapshot | null = useMemo(() => {
-    if (snapshots.length === 0) return null;
-    if (selectedSnapshotKey) {
-      const [date, time] = selectedSnapshotKey.split("|");
-      const found = snapshots.find((s) => s.date === date && s.time === time);
-      if (found) return found;
-    }
-    return snapshots[snapshots.length - 1]; // default: latest
-  }, [snapshots, selectedSnapshotKey]);
+  const availableDates = useMemo(() => {
+    const set = new Set(snapshots.map((s) => s.date));
+    return Array.from(set).sort();
+  }, [snapshots]);
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+
+  const effectiveDate = selectedDate && availableDates.includes(selectedDate) ? selectedDate : availableDates[availableDates.length - 1];
+
+  const availableTimesForDate = useMemo(
+    () => snapshots.filter((s) => s.date === effectiveDate).map((s) => s.time),
+    [snapshots, effectiveDate]
+  );
+
+  const effectiveTime =
+    selectedTime && availableTimesForDate.includes(selectedTime)
+      ? selectedTime
+      : availableTimesForDate[availableTimesForDate.length - 1];
+
+  const selectedSnapshot: Snapshot | null = useMemo(
+    () => (effectiveDate && effectiveTime ? { date: effectiveDate, time: effectiveTime } : null),
+    [effectiveDate, effectiveTime]
+  );
 
   const currentStatusRows = useMemo(
     () =>
@@ -324,15 +338,29 @@ export default function Home() {
 
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
               <label>
-                기준 시점
+                날짜
                 <select
-                  value={selectedSnapshot ? `${selectedSnapshot.date}|${selectedSnapshot.time}` : ""}
-                  onChange={(e) => setSelectedSnapshotKey(e.target.value)}
+                  value={effectiveDate ?? ""}
+                  onChange={(e) => setSelectedDate(e.target.value)}
                   style={{ display: "block", marginTop: "0.2rem" }}
                 >
-                  {snapshots.map((s) => (
-                    <option key={`${s.date}|${s.time}`} value={`${s.date}|${s.time}`}>
-                      {s.date} {s.time}
+                  {availableDates.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                시간
+                <select
+                  value={effectiveTime ?? ""}
+                  onChange={(e) => setSelectedTime(e.target.value)}
+                  style={{ display: "block", marginTop: "0.2rem" }}
+                >
+                  {availableTimesForDate.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
                     </option>
                   ))}
                 </select>
@@ -372,20 +400,27 @@ export default function Home() {
                   </thead>
                   <tbody>
                     {rows.map((row) => {
+                      if (row.processState === "not_started") {
+                        return (
+                          <tr key={row.config}>
+                            <td style={cellStyle}>{row.config}</td>
+                            <td style={cellStyle}></td>
+                            <td style={cellStyle}></td>
+                            <td style={cellStyle}></td>
+                            <td style={cellStyle}></td>
+                          </tr>
+                        );
+                      }
                       const bg =
                         row.alarmLevel === "risk" ? STATUS_COLOR.risk : row.alarmLevel === "warning" ? STATUS_COLOR.warning : "transparent";
                       return (
                         <tr key={row.config} style={{ background: bg }}>
                           <td style={cellStyle}>{row.config}</td>
-                          <td style={cellStyle}>{row.currentProcess ?? "-"}</td>
+                          <td style={cellStyle}>{row.currentProcess}</td>
+                          <td style={cellStyle}>{row.processState === "completed" ? "완료" : "대기 중"}</td>
+                          <td style={cellStyle}>{row.planDate}</td>
                           <td style={cellStyle}>
-                            {row.processState === "completed" ? "완료" : row.processState === "not_started" ? "미착수" : "대기 중"}
-                          </td>
-                          <td style={cellStyle}>{row.planDate ?? "-"}</td>
-                          <td style={cellStyle}>
-                            {row.delayDays === null
-                              ? "-"
-                              : `${row.status} (${row.delayDays > 0 ? "+" : ""}${row.delayDays}일)`}
+                            {row.delayDays === null ? "" : `${row.status} (${row.delayDays > 0 ? "+" : ""}${row.delayDays}일)`}
                           </td>
                         </tr>
                       );

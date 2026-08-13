@@ -89,7 +89,7 @@ export function computeCurrentStatus(
         currentProcess = lastCompleted;
       } else {
         processState = "not_started";
-        currentProcess = processesInOrder[0] ?? null;
+        currentProcess = null;
       }
     }
 
@@ -102,6 +102,20 @@ export function computeCurrentStatus(
         planDate: null,
         delayDays: null,
         status: "완료",
+        alarmLevel: null,
+      });
+      continue;
+    }
+
+    if (processState === "not_started") {
+      rows.push({
+        line: entry.line,
+        config: entry.config,
+        processState,
+        currentProcess: null,
+        planDate: null,
+        delayDays: null,
+        status: "계획준수",
         alarmLevel: null,
       });
       continue;

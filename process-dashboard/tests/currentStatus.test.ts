@@ -81,7 +81,9 @@ describe("computeCurrentStatus branch coverage (synthetic)", () => {
     ];
     const [row] = computeCurrentStatus(dailyPlan, processStatus, { date: "2026-08-13", time: "9:00 A.M" });
     expect(row.processState).toBe("not_started");
-    expect(row.currentProcess).toBe("process 1");
+    expect(row.currentProcess).toBeNull();
+    expect(row.planDate).toBeNull();
+    expect(row.delayDays).toBeNull();
   });
 
   it("in_progress + late: Input present, no Output, past the plan date", () => {
