@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { parseAllFiles } from "@/lib/parseAll";
 import { validateDataset } from "@/lib/validate";
 import {
@@ -17,6 +17,7 @@ import { listSnapshots, computeCurrentStatus, trafficLight, type Snapshot, type 
 import { computeShipmentRisk, type RiskStatus } from "@/lib/shipmentRisk";
 import { computeShipmentDraft } from "@/lib/shipmentDraft";
 import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
+import { saveUpload, loadUpload } from "@/lib/persistence";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
 function SnapshotPicker({
@@ -112,11 +113,27 @@ export default function Home() {
   const [dataset, setDataset] = useState<ParsedDataset | null>(null);
   const [unrecognizedFiles, setUnrecognizedFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [targetYieldInputs, setTargetYieldInputs] = useState<Record<string, string>>({});
   const [targetYieldErrors, setTargetYieldErrors] = useState<Record<string, string>>({});
   const [targetYields, setTargetYields] = useState<Record<string, number>>({});
+
+  // 새로고침 후에도 최근 업로드 결과를 유지: 마운트 시 로컬 저장된 결과를 복원한다.
+  // localStorage는 서버에 없으므로 SSR 하이드레이션과 어긋나지 않으려면 반드시
+  // 마운트 이후(useEffect)에 읽어야 한다 — lazy useState initializer로는 서버/
+  // 클라이언트 첫 렌더 결과가 달라져 하이드레이션 에러가 난다.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const stored = loadUpload();
+    if (stored) {
+      setDataset(stored.dataset);
+      setUnrecognizedFiles(stored.unrecognizedFiles);
+      setLastSavedAt(stored.savedAt);
+    }
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
@@ -131,6 +148,8 @@ export default function Home() {
       const parsed = parseAllFiles(inputs);
       setDataset(parsed.dataset);
       setUnrecognizedFiles(parsed.unrecognizedFiles);
+      saveUpload(parsed.dataset, parsed.unrecognizedFiles);
+      setLastSavedAt(new Date().toISOString());
     } finally {
       setLoading(false);
     }
@@ -320,7 +339,20 @@ export default function Home() {
 
       {dataset && (
         <>
-          <section>
+          <nav style={navStyle}>
+            <a href="#upload">Upload Center</a>
+            <a href="#yield">Yield / NG Analysis</a>
+            <a href="#process">Process Dashboard</a>
+            <a href="#risk">Shipment Risk</a>
+            <a href="#draft">Shipment Draft</a>
+            {lastSavedAt && (
+              <span style={{ marginLeft: "auto", color: "#888", fontSize: "0.8rem" }}>
+                마지막 업로드 저장: {new Date(lastSavedAt).toLocaleString("ko-KR")} (새로고침해도 유지됩니다)
+              </span>
+            )}
+          </nav>
+
+          <section id="upload">
             <h2 style={sectionTitle}>Upload Center — 파일 인식 결과</h2>
             <ul>
               {dataset.files.map((f) => (
@@ -360,7 +392,7 @@ export default function Home() {
             )}
           </section>
 
-          <section>
+          <section id="yield">
             <h2 style={sectionTitle}>
               Yield / NG Analysis{" "}
               <button onClick={handleDownloadYieldExcel} style={downloadButtonStyle}>
@@ -461,7 +493,7 @@ export default function Home() {
             </div>
           </section>
 
-          <section>
+          <section id="process">
             <h2 style={sectionTitle}>
               Process Dashboard — 현재 위치 + Daily Plan 대비 지연{" "}
               <button onClick={handleDownloadProcessDashboardExcel} style={downloadButtonStyle}>
@@ -565,7 +597,7 @@ export default function Home() {
             ))}
           </section>
 
-          <section>
+          <section id="risk">
             <h2 style={sectionTitle}>Shipment Risk — 출하 부족 Risk 판정</h2>
             <p style={{ color: "#555" }}>
               예상 최종 양품 = 현재 양품 × 남은 Process들의 기준 수율. 부족분을 승인된 Waiver NG로 채울 수 있는지에 따라 판정합니다.
@@ -608,7 +640,7 @@ export default function Home() {
             </table>
           </section>
 
-          <section>
+          <section id="draft">
             <h2 style={sectionTitle}>Shipment Draft — 출하 D-1 초안</h2>
             <p style={{ color: "#555" }}>기준 시점의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.</p>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-end", marginBottom: "1rem" }}>
@@ -692,4 +724,17 @@ const priorityButtonStyle: CSSProperties = {
   marginLeft: "0.5rem",
   padding: "0.05rem 0.4rem",
   cursor: "pointer",
+};
+const navStyle: CSSProperties = {
+  display: "flex",
+  gap: "1.2rem",
+  alignItems: "center",
+  flexWrap: "wrap",
+  padding: "0.6rem 0",
+  marginBottom: "0.5rem",
+  borderBottom: "1px solid #ddd",
+  position: "sticky",
+  top: 0,
+  background: "#fff",
+  zIndex: 1,
 };
