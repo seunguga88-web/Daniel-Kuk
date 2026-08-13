@@ -23,7 +23,7 @@ function processNum(name: string): number {
  * "남은 Process"는 최신 스냅샷 기준 아직 Output이 없는 Process들이다
  * (진행 중인 Process 포함, 이미 완료된 Process는 이미 currentGoodQty에 반영됨).
  */
-function computeExpectedFinalGood(entry: ProcessStatusEntry, yieldCells: YieldCell[], targetYields: Record<string, number>): number {
+export function computeExpectedFinalGood(entry: ProcessStatusEntry, yieldCells: YieldCell[], targetYields: Record<string, number>): number {
   const currentGoodQty = entry.goodQty ?? 0;
   const remaining = Object.keys(entry.processValues)
     .filter((p) => entry.processValues[p].output === null)

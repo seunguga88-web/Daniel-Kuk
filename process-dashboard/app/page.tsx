@@ -15,6 +15,7 @@ import {
 import { DEFAULT_SCHEDULE_THRESHOLDS, type ScheduleThresholds } from "@/lib/scheduleAnalysis";
 import { listSnapshots, computeCurrentStatus, trafficLight, type Snapshot, type TrafficLight } from "@/lib/currentStatus";
 import { computeShipmentRisk, type RiskStatus } from "@/lib/shipmentRisk";
+import { computeShipmentDraft } from "@/lib/shipmentDraft";
 import { buildYieldAnalysisWorkbook, buildProcessDashboardWorkbook } from "@/lib/exportExcel";
 import type { FileKind, ParsedDataset } from "@/lib/types";
 
@@ -205,6 +206,39 @@ export default function Home() {
         ? computeShipmentRisk(dataset.processStatus, dataset.shipmentPlan, dataset.shipmentTable, yieldCells, targetYields)
         : [],
     [dataset, yieldCells, targetYields]
+  );
+
+  const [destinationPriority, setDestinationPriority] = useState<string[]>([
+    "Destination 1",
+    "Destination 2",
+    "Destination 3",
+    "Destination 4",
+  ]);
+
+  function moveDestination(index: number, direction: -1 | 1) {
+    setDestinationPriority((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  const shipmentDraftRows = useMemo(
+    () =>
+      dataset && selectedSnapshot
+        ? computeShipmentDraft(
+            selectedSnapshot,
+            dataset.dailyPlan,
+            dataset.shipmentPlan,
+            dataset.processStatus,
+            yieldCells,
+            targetYields,
+            destinationPriority
+          )
+        : [],
+    [dataset, selectedSnapshot, yieldCells, targetYields, destinationPriority]
   );
 
   async function handleDownloadYieldExcel() {
@@ -542,6 +576,64 @@ export default function Home() {
               </tbody>
             </table>
           </section>
+
+          <section>
+            <h2 style={sectionTitle}>Shipment Draft — 출하 D-1 초안</h2>
+            <p style={{ color: "#555" }}>
+              위 Process Dashboard에서 고른 기준 시점(날짜)의 다음 날 출하 예정인 Config에 대해 Destination별 OK/Waiver 배정 초안을 만듭니다.
+              {selectedSnapshot && ` (기준 시점: ${selectedSnapshot.date} ${selectedSnapshot.time})`}
+            </p>
+
+            <h3 style={{ fontSize: "1rem" }}>Destination 우선순위 (화면에서 순서 변경 가능)</h3>
+            <ol style={{ paddingLeft: "1.2rem", marginBottom: "1rem" }}>
+              {destinationPriority.map((dest, i) => (
+                <li key={dest} style={{ marginBottom: "0.2rem" }}>
+                  {dest}
+                  <button onClick={() => moveDestination(i, -1)} disabled={i === 0} style={priorityButtonStyle}>
+                    ▲
+                  </button>
+                  <button onClick={() => moveDestination(i, 1)} disabled={i === destinationPriority.length - 1} style={priorityButtonStyle}>
+                    ▼
+                  </button>
+                </li>
+              ))}
+            </ol>
+
+            {shipmentDraftRows.length === 0 ? (
+              <p style={{ color: "#555" }}>이 기준 시점 기준으로 다음 날 출하 예정인 Config가 없습니다.</p>
+            ) : (
+              shipmentDraftRows.map((row) => (
+                <div key={row.config} style={{ marginBottom: "1.5rem" }}>
+                  <h3 style={{ fontSize: "1rem" }}>
+                    {row.config} — 출하일 {row.shipDate} (OK 가능 {Math.round(row.okAvailable)} / Waiver 필요 {Math.round(row.waiverNeeded)} / 계획{" "}
+                    {row.totalShipment})
+                  </h3>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={cellStyle}>Destination</th>
+                        <th style={cellStyle}>계획 수량</th>
+                        <th style={cellStyle}>OK 배정</th>
+                        <th style={cellStyle}>Waiver 배정</th>
+                        <th style={cellStyle}>합계</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {row.allocations.map((a) => (
+                        <tr key={a.destination}>
+                          <td style={cellStyle}>{a.destination}</td>
+                          <td style={cellStyle}>{a.planQty}</td>
+                          <td style={cellStyle}>{Math.round(a.okQty)}</td>
+                          <td style={cellStyle}>{Math.round(a.waiverQty)}</td>
+                          <td style={cellStyle}>{Math.round(a.totalQty)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))
+            )}
+          </section>
         </>
       )}
     </main>
@@ -556,5 +648,10 @@ const downloadButtonStyle: CSSProperties = {
   fontSize: "0.8rem",
   fontWeight: "normal",
   padding: "0.2rem 0.6rem",
+  cursor: "pointer",
+};
+const priorityButtonStyle: CSSProperties = {
+  marginLeft: "0.5rem",
+  padding: "0.05rem 0.4rem",
   cursor: "pointer",
 };
